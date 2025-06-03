@@ -1,8 +1,15 @@
+import { getServerSession } from 'next-auth'
+import { redirect } from 'next/navigation'
+import { authOptions } from '../api/auth/[...nextauth]/route'
 import { fakeUsers } from '@/lib/fake-data'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
-export default function AdminPage() {
+export default async function AdminPage() {
+  const session = await getServerSession(authOptions)
+  if (!session) {
+    redirect('/login')
+  }
   return (
     <main className="flex flex-col items-center justify-center min-h-[60vh] gap-8">
       <h1 className="text-2xl font-bold mb-4">Administration</h1>

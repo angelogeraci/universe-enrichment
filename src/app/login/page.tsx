@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from 'sonner'
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,7 +23,9 @@ export default function LoginPage() {
     });
     if (res?.error) {
       setError("Email or password invalid");
+      toast.error("Email ou mot de passe invalide");
     } else {
+      toast.success("Connexion réussie !");
       router.push("/");
     }
   };

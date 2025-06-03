@@ -1,9 +1,16 @@
+import { getServerSession } from 'next-auth'
+import { redirect } from 'next/navigation'
+import { authOptions } from '../api/auth/[...nextauth]/route'
 import { fakeDashboard } from '@/lib/fake-data'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const session = await getServerSession(authOptions)
+  if (!session) {
+    redirect('/login')
+  }
   return (
     <main className="flex flex-col items-center justify-center min-h-[60vh] gap-8">
       <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
