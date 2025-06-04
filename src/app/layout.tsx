@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppProviders } from '@/components/AppProviders'
-import { NavigationBarWrapper } from '@/components/NavigationBarWrapper'
+import { SidebarApp } from '@/components/sidebar-app'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,8 +28,12 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <AppProviders>
-          <NavigationBarWrapper />
-          {children}
+          <div className="flex min-h-screen">
+            {/* <SidebarApp /> */}
+            <main className="flex-1 min-w-0 flex flex-col items-center justify-center">
+              {children}
+            </main>
+          </div>
         </AppProviders>
       </body>
     </html>

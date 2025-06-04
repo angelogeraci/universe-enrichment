@@ -35,7 +35,7 @@ const authOptions = {
           return null;
         }
         console.log('Connexion réussie pour:', user.email);
-        return { id: user.id, email: user.email };
+        return { id: user.id, email: user.email, role: user.role };
       },
     }),
   ],
@@ -44,6 +44,24 @@ const authOptions = {
     signOut: '/signout',
   },
   secret: process.env.AUTH_SECRET,
+  callbacks: {
+    async jwt({ token, user }: any) {
+      if (user) {
+        token.role = user.role
+      } else if (!token.role && token.email) {
+        const prisma = new PrismaClient()
+        const dbUser = await prisma.user.findUnique({ where: { email: token.email } })
+        token.role = dbUser?.role || 'user'
+      }
+      return token
+    },
+    async session({ session, token }: any) {
+      if (session.user) {
+        session.user.role = token.role
+      }
+      return session
+    },
+  },
 };
 
 const handler = NextAuth(authOptions);

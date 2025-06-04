@@ -4,17 +4,35 @@ const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
 
 async function main() {
-  const email = 'angelo.geraci@soprism.com';
-  const password = 'admin1234';
-  const hashedPassword = bcrypt.hashSync(password, 10);
-
-  const user = await prisma.user.create({
-    data: {
-      email,
-      password: hashedPassword,
+  // Admin
+  const adminEmail = 'angelo.geraci@soprism.com';
+  const adminPassword = 'admin1234';
+  const adminHashed = bcrypt.hashSync(adminPassword, 10);
+  await prisma.user.upsert({
+    where: { email: adminEmail },
+    update: {},
+    create: {
+      email: adminEmail,
+      password: adminHashed,
+      role: 'admin',
     },
   });
-  console.log('User created:', user);
+
+  // User classique
+  const userEmail = 'user@demo.com';
+  const userPassword = 'user1234';
+  const userHashed = bcrypt.hashSync(userPassword, 10);
+  await prisma.user.upsert({
+    where: { email: userEmail },
+    update: {},
+    create: {
+      email: userEmail,
+      password: userHashed,
+      role: 'user',
+    },
+  });
+
+  console.log('Admin et user créés !');
 }
 
 main()
