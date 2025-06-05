@@ -5,6 +5,7 @@ import { AppProviders } from '@/components/AppProviders'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { Breadcrumb } from '@/components/ui/breadcrumb'
+import { ClientGuard } from '@/components/ui/client-guard'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,19 +32,23 @@ export default function PrivateLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <AppProviders>
           <SidebarProvider>
-            <div className="flex min-h-screen flex-col">
-              <div className="bg-white w-full" />
-              <div className="flex flex-1">
-                <AppSidebar />
-                <main className="flex-1 min-w-0 flex flex-col">
-                  <div className="px-6 pt-6">
-                    <Breadcrumb />
+            <ClientGuard>
+              <div className="flex min-h-screen flex-col">
+                <div className="bg-white w-full" />
+                <div className="flex flex-1">
+                  <AppSidebar />
+                  <div className="flex-1 min-w-0 flex flex-col">
+                    <main className="flex-1 min-w-0 flex flex-col">
+                      <div className="w-full bg-white pt-6 pb-2 px-8">
+                        <Breadcrumb />
+                      </div>
+                      <div className="border-b border-gray-300 w-full" />
+                      {children}
+                    </main>
                   </div>
-                  <div className="border-b border-gray-300 w-full" />
-                  {children}
-                </main>
+                </div>
               </div>
-            </div>
+            </ClientGuard>
           </SidebarProvider>
         </AppProviders>
       </body>

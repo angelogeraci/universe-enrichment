@@ -20,50 +20,50 @@ export function NavigationBar() {
   const handleSignOut = useCallback(() => signOut({ callbackUrl: '/login' }), [])
 
   return (
-    <nav className="w-full flex justify-center py-4 bg-background/80 border-b border-border sticky top-0 z-50 backdrop-blur-md">
+    <nav className="w-full flex justify-center py-4 bg-background/80 border-b border-border sticky top-0 z-50 backdrop-blur-md" data-cy="main-nav">
       <NavigationMenu>
         <NavigationMenuList>
           <NavigationMenuItem>
             <NavigationMenuLink asChild>
-              <Link href="/" className="px-4 py-2 rounded hover:bg-accent transition-colors">Dashboard</Link>
+              <Link href="/" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-dashboard">Dashboard</Link>
             </NavigationMenuLink>
           </NavigationMenuItem>
           <NavigationMenuItem>
             <NavigationMenuLink asChild>
-              <Link href="/projects" className="px-4 py-2 rounded hover:bg-accent transition-colors">Projets</Link>
+              <Link href="/projects" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-projects">Projets</Link>
             </NavigationMenuLink>
           </NavigationMenuItem>
           <NavigationMenuItem>
             <NavigationMenuLink asChild>
-              <Link href="/enrichment" className="px-4 py-2 rounded hover:bg-accent transition-colors">Enrichissement</Link>
+              <Link href="/enrichment" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-enrichment">Enrichissement</Link>
             </NavigationMenuLink>
           </NavigationMenuItem>
           <NavigationMenuItem>
             <NavigationMenuLink asChild>
-              <Link href="/scoring" className="px-4 py-2 rounded hover:bg-accent transition-colors">Scoring</Link>
+              <Link href="/scoring" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-scoring">Scoring</Link>
             </NavigationMenuLink>
           </NavigationMenuItem>
           {/* Lien Admin visible uniquement pour les admins */}
           {isAuthenticated && user?.role === 'admin' && (
             <NavigationMenuItem>
               <NavigationMenuLink asChild>
-                <Link href="/admin" className="px-4 py-2 rounded hover:bg-accent transition-colors">Admin</Link>
+                <Link href="/admin" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-admin">Admin</Link>
               </NavigationMenuLink>
             </NavigationMenuItem>
           )}
           {isAuthenticated && (
             <NavigationMenuItem>
               <NavigationMenuLink asChild>
-                <Link href="/profile" className="px-4 py-2 rounded hover:bg-accent transition-colors">Profil</Link>
+                <Link href="/profile" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-profile">Profil</Link>
               </NavigationMenuLink>
             </NavigationMenuItem>
           )}
           <NavigationMenuItem>
             {isAuthenticated ? (
-              <button onClick={handleSignOut} className="px-4 py-2 rounded hover:bg-accent transition-colors">Déconnexion</button>
+              <button onClick={handleSignOut} className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-logout">Déconnexion</button>
             ) : (
               <NavigationMenuLink asChild>
-                <Link href="/login" className="px-4 py-2 rounded hover:bg-accent transition-colors">Connexion</Link>
+                <Link href="/login" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-login">Connexion</Link>
               </NavigationMenuLink>
             )}
           </NavigationMenuItem>

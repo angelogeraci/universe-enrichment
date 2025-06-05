@@ -1,22 +1,10 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '../api/auth/[...nextauth]/route'
+import { render, screen } from '@testing-library/react'
 import DashboardPage from './page'
 
-jest.mock('next-auth')
-
-const mockGetServerSession = getServerSession as jest.Mock
-
-describe('DashboardPage (sécurité serveur)', () => {
-  it('redirige vers /login si pas de session', async () => {
-    mockGetServerSession.mockResolvedValueOnce(null)
-    // On ne peut pas tester la redirection Next.js directement ici,
-    // mais on peut vérifier que le composant ne retourne rien ou une promesse rejetée
-    await expect(DashboardPage()).resolves.toBeUndefined()
-  })
-
-  it('affiche la page si session présente', async () => {
-    mockGetServerSession.mockResolvedValueOnce({ user: { email: 'test@demo.com' } })
-    const result = await DashboardPage()
-    expect(result).toBeTruthy()
+describe('DashboardPage', () => {
+  it('affiche le titre et le texte', () => {
+    render(<DashboardPage />)
+    expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    expect(screen.getByText('Bienvenue sur le dashboard !')).toBeInTheDocument()
   })
 }) 

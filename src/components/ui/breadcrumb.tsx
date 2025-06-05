@@ -7,7 +7,7 @@ export function Breadcrumb () {
   const segments = pathname.split('/').filter(Boolean)
 
   return (
-    <nav className='text-sm text-gray-500 flex items-center gap-2' aria-label='Breadcrumb'>
+    <nav className='text-sm text-gray-500 flex items-center gap-2' aria-label='Breadcrumb' data-cy='breadcrumb'>
       <Link href='/' className='hover:underline text-gray-700 font-medium'>Dashboard</Link>
       {segments.map((segment, i) => {
         const href = '/' + segments.slice(0, i + 1).join('/')

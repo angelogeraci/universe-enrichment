@@ -4,10 +4,17 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from 'sonner'
+
+interface UserWithRole {
+  name?: string | null
+  email?: string | null
+  image?: string | null
+  role?: string | null
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,7 +33,15 @@ export default function LoginPage() {
       toast.error("Email ou mot de passe invalide");
     } else {
       toast.success("Connexion réussie !");
-      router.push("/");
+      let tries = 0;
+      let session: { user?: UserWithRole } | null = null;
+      while (tries < 10) {
+        session = await getSession();
+        if (session?.user?.role) break;
+        await new Promise(r => setTimeout(r, 150));
+        tries++;
+      }
+      router.push("/dashboard");
     }
   };
 

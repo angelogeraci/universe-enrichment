@@ -41,55 +41,57 @@ export function AppSidebar() {
           <span className="ml-auto"><svg width="20" height="20" fill="none"><rect width="20" height="20" rx="6" fill="#fff"/><path d="M7 10h6M10 7v6" stroke="#000" strokeWidth="1.5" strokeLinecap="round"/></svg></span>
         </button>
         {/* Groupe principal */}
-        <SidebarMenu className="mt-2 bg-muted">
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-              <Link href="/">
-                <Home className="mr-3 h-5 w-5" /> Dashboard
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-              <Link href="/projects">
-                <Folder className="mr-3 h-5 w-5" /> Projects
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-              <Link href="/enrichment">
-                <Database className="mr-3 h-5 w-5" /> Enrichment
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-              <Link href="/scoring">
-                <BarChart className="mr-3 h-5 w-5" /> Analytics
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          {isAuthenticated && (
+        <nav aria-label="Main menu" data-cy="sidebar-nav">
+          <SidebarMenu className="mt-2 bg-muted">
             <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-                <Link href="/profile">
-                  <User className="mr-3 h-5 w-5" /> Team
+                <Link href="/" data-cy="sidebar-dashboard">
+                  <Home className="mr-3 h-5 w-5" /> Dashboard
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-          )}
-          {/* Lien Admin visible uniquement pour les admins */}
-          {isAuthenticated && user?.role === 'admin' && (
             <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-                <Link href="/admin">
-                  <Shield className="mr-3 h-5 w-5" /> Admin
+                <Link href="/projects" data-cy="sidebar-projects">
+                  <Folder className="mr-3 h-5 w-5" /> Projects
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-          )}
-        </SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
+                <Link href="/enrichment" data-cy="sidebar-enrichment">
+                  <Database className="mr-3 h-5 w-5" /> Enrichment
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
+                <Link href="/scoring" data-cy="sidebar-scoring">
+                  <BarChart className="mr-3 h-5 w-5" /> Analytics
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            {isAuthenticated && (
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
+                  <Link href="/profile" data-cy="sidebar-profile">
+                    <User className="mr-3 h-5 w-5" /> Team
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
+            {/* Lien Admin visible uniquement pour les admins */}
+            {isAuthenticated && user?.role === 'admin' && (
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
+                  <Link href="/admin" data-cy="sidebar-admin">
+                    <Shield className="mr-3 h-5 w-5" /> Admin
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
+          </SidebarMenu>
+        </nav>
         {/* Groupe Documents */}
         <div className="mt-6 mb-1 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Documents</div>
         <SidebarMenu className="bg-muted">
@@ -126,12 +128,12 @@ export function AppSidebar() {
         <div className="flex-1" />
         <div className="mt-6 px-3">
           {isAuthenticated ? (
-            <button onClick={handleSignOut} className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black transition-colors text-base">
+            <button onClick={handleSignOut} className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black transition-colors text-base" data-cy="sidebar-logout">
               <LogOut className="mr-2 h-5 w-5" /> Déconnexion
             </button>
           ) : (
             <SidebarMenuButton asChild isActive={false} className="w-full text-gray-700 text-base">
-              <Link href="/login">
+              <Link href="/login" data-cy="sidebar-login">
                 <LogIn className="mr-2 h-5 w-5" /> Connexion
               </Link>
             </SidebarMenuButton>

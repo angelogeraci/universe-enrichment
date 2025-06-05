@@ -20,9 +20,14 @@ export async function middleware (req: NextRequest) {
   // Vérifier la session NextAuth (JWT)
   const token = await getToken({ req, secret: process.env.AUTH_SECRET })
   if (!token) {
+    // Rediriger toute tentative d'accès à une route privée vers /login
     const loginUrl = new URL('/login', req.url)
     loginUrl.searchParams.set('callbackUrl', req.nextUrl.pathname)
     return NextResponse.redirect(loginUrl)
+  }
+  // Protection spécifique pour /admin
+  if (pathname.startsWith('/admin') && token.role !== 'admin') {
+    return NextResponse.redirect(new URL('/dashboard', req.url))
   }
   return NextResponse.next()
 }
