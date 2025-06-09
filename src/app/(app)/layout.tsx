@@ -37,10 +37,12 @@ export default function PrivateLayout({
                 <div className="bg-white w-full" />
                 <div className="flex flex-1">
                   <AppSidebar />
-                  <div className="flex-1 min-w-0 flex flex-col">
-                    <main className="flex-1 min-w-0 flex flex-col">
-                      <div className="w-full bg-white pt-6 pb-2 px-8">
-                        <Breadcrumb />
+                  <div className="flex-1" style={{ width: 'calc(100vw - 256px)' }}>
+                    <main className="w-full">
+                      <div className="w-full bg-white pt-6 pb-2">
+                        <div className="px-32">
+                          <Breadcrumb />
+                        </div>
                       </div>
                       <div className="border-b border-gray-300 w-full" />
                       {children}

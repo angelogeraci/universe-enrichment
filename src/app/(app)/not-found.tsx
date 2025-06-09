@@ -4,18 +4,16 @@ import Link from 'next/link'
 
 export default function NotFound() {
   return (
-    <main className="flex flex-col items-center justify-center min-h-[60vh]">
-      <Card className="w-full max-w-md text-center">
-        <CardHeader>
-          <CardTitle className="text-3xl font-bold mb-2">404</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-lg text-muted-foreground mb-4">Page non trouvée</p>
-          <Button asChild>
-            <Link href="/">Retour à l'accueil</Link>
-          </Button>
-        </CardContent>
-      </Card>
-    </main>
+    <div className="w-full px-32 py-6">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Page non trouvée</h1>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="bg-white rounded-lg border p-6">
+          <h2 className="text-lg font-semibold mb-2">Erreur 404</h2>
+          <p className="text-muted-foreground">La page que vous cherchez n'existe pas.</p>
+        </div>
+      </div>
+    </div>
   )
 } 

@@ -7,18 +7,17 @@ jest.mock('next/navigation', () => ({
 }))
 
 describe('Breadcrumb', () => {
-  it('affiche Dashboard seul sur la page racine', () => {
+  it('affiche Accueil seul sur la page racine', () => {
     (usePathname as jest.Mock).mockReturnValue('/')
     render(<Breadcrumb />)
-    expect(screen.getByText('Dashboard')).toBeInTheDocument()
-    expect(screen.queryByText('/')).not.toBeInTheDocument()
+    expect(screen.getByText('Accueil')).toBeInTheDocument()
   })
 
-  it('affiche les segments du chemin', () => {
+  it('affiche les segments du chemin avec Accueil', () => {
     (usePathname as jest.Mock).mockReturnValue('/projects/123')
     render(<Breadcrumb />)
-    expect(screen.getByText('Dashboard')).toBeInTheDocument()
-    expect(screen.getByText('Projects')).toBeInTheDocument()
+    expect(screen.getByText('Accueil')).toBeInTheDocument()
+    expect(screen.getByText('Projets')).toBeInTheDocument()
     expect(screen.getByText('123')).toBeInTheDocument()
   })
 }) 

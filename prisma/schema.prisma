@@ -21,9 +21,90 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   role      Role     @default(user)
+  categoryLists CategoryList[]        @relation("OwnerCategoryLists")
+  sharedCategoryLists CategoryList[]  @relation("SharedCategoryLists")
+  projects  Project[]
 }
 
 enum Role {
   admin
   user
+}
+
+model CategoryList {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  createdAt   DateTime    @default(now())
+  isPublic    Boolean     @default(false)
+  owner       User        @relation("OwnerCategoryLists", fields: [ownerId], references: [id])
+  ownerId     String
+  sharedWith  User[]      @relation("SharedCategoryLists")
+  categories  Category[]
+  projects    Project[]
+}
+
+model Category {
+  id             String   @id @default(cuid())
+  name           String
+  path           String
+  andCriteria    String[]
+  categoryList   CategoryList @relation(fields: [categoryListId], references: [id])
+  categoryListId String
+}
+
+model Project {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  description   String
+  country       String
+  searchType    String
+  categoryList  CategoryList @relation(fields: [categoryListId], references: [id])
+  categoryListId String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  owner         User     @relation(fields: [ownerId], references: [id])
+  ownerId       String
+  criteres      Critere[]
+  enrichmentStatus String @default("pending")
+}
+
+model PromptTemplate {
+  id          String   @id @default(cuid())
+  label       String
+  template    String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Critere {
+  id            String   @id @default(cuid())
+  project       Project  @relation(fields: [projectId], references: [id])
+  projectId     String
+  category      String
+  categoryPath  String[]
+  country       String
+  label         String
+  status        String
+  note          String?
+  suggestions   SuggestionFacebook[]
+  selectedSuggestionId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model SuggestionFacebook {
+  id              String   @id @default(cuid())
+  critere         Critere  @relation(fields: [critereId], references: [id])
+  critereId       String
+  label           String
+  audience        Int
+  similarityScore Float
+  isBestMatch     Boolean  @default(false)
+  isSelectedByUser Boolean @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

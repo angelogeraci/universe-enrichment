@@ -35,7 +35,7 @@ export function NavigationBar() {
           </NavigationMenuItem>
           <NavigationMenuItem>
             <NavigationMenuLink asChild>
-              <Link href="/enrichment" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-enrichment">Enrichissement</Link>
+              <Link href="/categories" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-categories">Categories</Link>
             </NavigationMenuLink>
           </NavigationMenuItem>
           <NavigationMenuItem>

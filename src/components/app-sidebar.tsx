@@ -41,7 +41,7 @@ export function AppSidebar() {
           <span className="ml-auto"><svg width="20" height="20" fill="none"><rect width="20" height="20" rx="6" fill="#fff"/><path d="M7 10h6M10 7v6" stroke="#000" strokeWidth="1.5" strokeLinecap="round"/></svg></span>
         </button>
         {/* Groupe principal */}
-        <nav aria-label="Main menu" data-cy="sidebar-nav">
+        <nav aria-label="Main menu" data-cy="main-nav">
           <SidebarMenu className="mt-2 bg-muted">
             <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
@@ -59,8 +59,8 @@ export function AppSidebar() {
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-                <Link href="/enrichment" data-cy="sidebar-enrichment">
-                  <Database className="mr-3 h-5 w-5" /> Enrichment
+                <Link href="/categories" data-cy="sidebar-categories">
+                  <Database className="mr-3 h-5 w-5" /> Categories
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -84,7 +84,7 @@ export function AppSidebar() {
             {isAuthenticated && user?.role === 'admin' && (
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-                  <Link href="/admin" data-cy="sidebar-admin">
+                  <Link href="/admin" data-cy="nav-admin">
                     <Shield className="mr-3 h-5 w-5" /> Admin
                   </Link>
                 </SidebarMenuButton>

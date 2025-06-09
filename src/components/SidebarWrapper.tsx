@@ -1,11 +1,12 @@
 "use client"
 
-import { SidebarApp } from './sidebar-app'
+import { AppSidebar } from './app-sidebar'
 import { useSession } from 'next-auth/react'
 
 export function SidebarWrapper() {
-  const { data: session, status } = useSession()
-  if (status === 'loading') return null
-  if (!session?.user) return null
-  return <SidebarApp />
+  const { data: session } = useSession()
+  
+  if (!session) return null
+  
+  return <AppSidebar />
 } 

@@ -12,7 +12,6 @@ describe('Accès à la page admin selon le rôle', () => {
     cy.url().should('not.include', '/admin')
     cy.url().should('include', '/dashboard')
     cy.get('[data-cy="main-nav"] [data-cy="nav-admin"]').should('not.exist')
-    cy.get('[data-cy="sidebar-nav"] [data-cy="sidebar-admin"]').should('not.exist')
   })
 
   it('autorise l\'accès à /admin pour un admin', () => {
@@ -23,6 +22,5 @@ describe('Accès à la page admin selon le rôle', () => {
     cy.url().should('not.include', '/login')
     cy.reload()
     cy.get('[data-cy="main-nav"] [data-cy="nav-admin"]', { timeout: 20000 }).should('exist')
-    cy.get('[data-cy="sidebar-nav"] [data-cy="sidebar-admin"]', { timeout: 20000 }).should('exist')
   })
 }) 

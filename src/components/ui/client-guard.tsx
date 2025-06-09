@@ -1,9 +1,9 @@
-'use client'
-import { useSession } from 'next-auth/react'
-import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, ReactNode } from 'react'
+"use client"
 
-// Typage étendu pour inclure le rôle
+import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
+import { ReactNode, useEffect } from "react"
+
 interface UserWithRole {
   name?: string | null
   email?: string | null
@@ -15,29 +15,21 @@ interface SessionWithRole {
   user?: UserWithRole
 }
 
-export function ClientGuard({ children }: { children: ReactNode }) {
-  const { data: session, status } = useSession({ required: false }) as { data: SessionWithRole | null, status: string }
-  const pathname = usePathname()
+export function ClientGuard({ children, role }: { children: ReactNode; role?: string }) {
+  const { data: session, status } = useSession() as { data: SessionWithRole | null, status: string }
   const router = useRouter()
 
   useEffect(() => {
-    if (status === 'loading') return
-    // Non authentifié : redirige vers /login
-    if (!session?.user) {
-      if (pathname !== '/login' && pathname !== '/register') {
-        router.replace('/login')
-      }
-      return
+    if (status === "loading") return
+    if (!session) {
+      router.replace("/login")
+    } else if (role && session.user?.role !== role) {
+      router.replace("/")
     }
-    // Si non-admin sur /admin : redirige vers /dashboard
-    if (pathname.startsWith('/admin') && session.user.role !== 'admin') {
-      router.replace('/dashboard')
-    }
-  }, [session, status, pathname, router])
+  }, [session, status, role, router])
 
-  // Affiche les enfants seulement si authentifié et autorisé
-  if (status === 'loading') return null
-  if (!session?.user) return null
-  if (pathname.startsWith('/admin') && session.user.role !== 'admin') return null
+  if (status === "loading" || !session) {
+    return <div className="flex justify-center items-center h-full">Chargement...</div>
+  }
   return <>{children}</>
 } 
