@@ -26,12 +26,17 @@ export async function POST (req: NextRequest) {
     const body = await req.json()
     console.log('📥 BODY REÇU:', body)
     
-    const { project, category, country, options } = body
-    console.log('📋 PARAMÈTRES EXTRAITS:', { project, category, country, options })
+    const { project, category, country } = body
+    console.log('📋 PARAMÈTRES EXTRAITS:', { project, category, country })
     
     if (!category || !country) {
       console.log('❌ PARAMÈTRES MANQUANTS - category:', category, 'country:', country)
       return NextResponse.json({ error: 'Catégorie et pays requis' }, { status: 400 })
+    }
+
+    if (!project?.searchType) {
+      console.log('❌ SEARCH_TYPE MANQUANT dans project:', project)
+      return NextResponse.json({ error: 'Type de recherche manquant dans le projet' }, { status: 400 })
     }
     
     if (!process.env.OPENAI_API_KEY) {
@@ -39,26 +44,30 @@ export async function POST (req: NextRequest) {
       return NextResponse.json({ error: 'Clé OpenAI manquante' }, { status: 500 })
     }
     
-    console.log('🔍 RECHERCHE PROMPT TEMPLATE...')
+    console.log('🔍 RECHERCHE PROMPT TEMPLATE pour searchType:', project.searchType)
     
-    // Récupère le prompt principal
-    const promptTemplate = await prisma.promptTemplate.findFirst({ where: { isActive: true } })
-    console.log('📝 PROMPT TEMPLATE TROUVÉ:', promptTemplate ? 'OUI' : 'NON')
+    // Récupère le prompt selon le searchType du projet
+    const promptTemplate = await prisma.promptTemplate.findFirst({ 
+      where: { 
+        isActive: true,
+        searchType: project.searchType
+      } 
+    })
+    console.log('📝 PROMPT TEMPLATE TROUVÉ:', promptTemplate ? `${promptTemplate.label} (${promptTemplate.searchType})` : 'NON')
     
     if (!promptTemplate) {
-      console.log('❌ PROMPT TEMPLATE INTROUVABLE')
-      return NextResponse.json({ error: 'Prompt principal introuvable' }, { status: 500 })
+      console.log('❌ PROMPT TEMPLATE INTROUVABLE pour searchType:', project.searchType)
+      return NextResponse.json({ error: `Prompt introuvable pour le type de recherche: ${project.searchType}` }, { status: 500 })
     }
     
     console.log('📝 TEMPLATE BRUT:', promptTemplate.template)
     
-    // Génère le prompt dynamique avec le template de l'admin
+    // Génère le prompt dynamique avec le template spécialisé
     const userPrompt = promptTemplate.template
-      .replace('{{category}}', category)
-      .replace('{{country}}', country)
-      .replace('{{options}}', options || '')
+      .replace(/\{\{category\}\}/g, category)
+      .replace(/\{\{country\}\}/g, country)
     
-    // Combine le prompt de l'admin avec les instructions de format automatiques
+    // Combine le prompt spécialisé avec les instructions de format automatiques
     const fullPrompt = userPrompt + OUTPUT_FORMAT_INSTRUCTION
     
     console.log('📝 PROMPT UTILISATEUR:', userPrompt)

@@ -5,13 +5,13 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   console.log('🔍 PUT /api/prompts/[id] - DÉBUT')
   
   try {
-    const { id } = params
+    const { id } = await params
     console.log('📝 ID du prompt:', id)
     
     const body = await req.json()
     console.log('📥 DONNÉES REÇUES:', body)
     
-    const { label, template, description, isActive } = body
+    const { label, template, description, searchType, isActive } = body
     
     // Validation des données requises
     if (!label || !template) {
@@ -28,6 +28,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         label,
         template,
         description: description || null,
+        searchType: searchType || null,
         isActive: isActive !== undefined ? isActive : true
       }
     })
@@ -55,11 +56,21 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   console.log('🔍 GET /api/prompts/[id] - DÉBUT')
   
   try {
-    const { id } = params
+    const { id } = await params
     console.log('📝 ID du prompt:', id)
     
     const prompt = await prisma.promptTemplate.findUnique({
-      where: { id }
+      where: { id },
+      select: {
+        id: true,
+        label: true,
+        template: true,
+        description: true,
+        searchType: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true
+      }
     })
     
     if (!prompt) {
@@ -81,7 +92,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   console.log('🔍 DELETE /api/prompts/[id] - DÉBUT')
   
   try {
-    const { id } = params
+    const { id } = await params
     console.log('📝 ID du prompt:', id)
     
     await prisma.promptTemplate.delete({

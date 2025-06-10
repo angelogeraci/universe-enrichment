@@ -75,6 +75,7 @@ model PromptTemplate {
   label       String
   template    String
   description String?
+  searchType  String?  // "origin" ou "presence" 
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

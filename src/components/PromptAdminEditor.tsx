@@ -9,6 +9,7 @@ type Prompt = {
   label: string
   template: string
   description?: string
+  searchType?: string
   isActive: boolean
 }
 
@@ -24,36 +25,45 @@ Règles strictes :
 - Maximum 50 éléments par réponse`
 
 export default function PromptAdminEditor () {
-  const [prompt, setPrompt] = useState<Prompt | null>(null)
+  const [prompts, setPrompts] = useState<Prompt[]>([])
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
   useEffect(() => {
-    fetch('/api/prompts')
-      .then(res => res.json())
-      .then(data => {
-        setPrompt(data.prompts?.[0] || null)
-        setLoading(false)
-      })
-      .catch(() => {
-        setError('Erreur lors du chargement du prompt')
-        setLoading(false)
-      })
+    fetchPrompts()
   }, [])
 
-  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    if (!prompt) return
-    setPrompt({ ...prompt, [e.target.name]: e.target.value })
+  const fetchPrompts = async () => {
+    try {
+      const res = await fetch('/api/prompts')
+      const data = await res.json()
+      if (data.prompts) {
+        setPrompts(data.prompts.filter((p: Prompt) => p.isActive && p.searchType))
+      }
+      setLoading(false)
+    } catch (error) {
+      setError('Erreur lors du chargement des prompts')
+      setLoading(false)
+    }
   }
 
-  const handleSave = async (e: FormEvent) => {
-    e.preventDefault()
-    if (!prompt) return
-    setSaving(true)
+  const handleChange = (promptId: string, field: string, value: string) => {
+    setPrompts(prevPrompts => 
+      prevPrompts.map(prompt => 
+        prompt.id === promptId 
+          ? { ...prompt, [field]: value }
+          : prompt
+      )
+    )
+  }
+
+  const handleSave = async (prompt: Prompt) => {
+    setSaving(prompt.id)
     setError('')
     setSuccess('')
+    
     try {
       const res = await fetch(`/api/prompts/${prompt.id}`, {
         method: 'PUT',
@@ -62,57 +72,104 @@ export default function PromptAdminEditor () {
           label: prompt.label,
           template: prompt.template,
           description: prompt.description,
+          searchType: prompt.searchType,
           isActive: true
         })
       })
+      
       if (!res.ok) throw new Error('Erreur lors de la sauvegarde')
-      setSuccess('Modifications enregistrées')
+      
+      setSuccess(`Prompt "${prompt.label}" sauvegardé`)
+      setTimeout(() => setSuccess(''), 3000)
     } catch (e: any) {
       setError(e.message || 'Erreur inconnue')
     } finally {
-      setSaving(false)
+      setSaving(null)
     }
   }
 
-  if (loading) return <div>Chargement du prompt...</div>
-  if (!prompt) return <div>Aucun prompt trouvé.</div>
+  const getSearchTypeLabel = (searchType: string) => {
+    switch (searchType) {
+      case 'origin': return '🏠 Originaires uniquement'
+      case 'presence': return '🌍 Originaires + Présents'
+      default: return searchType
+    }
+  }
+
+  const getSearchTypeDescription = (searchType: string) => {
+    switch (searchType) {
+      case 'origin': 
+        return 'Ce prompt génère uniquement des critères qui sont strictement originaires du pays sélectionné.'
+      case 'presence': 
+        return 'Ce prompt génère des critères qui sont soit originaires du pays, soit populaires/présents dans ce pays.'
+      default: 
+        return 'Type de recherche non défini'
+    }
+  }
+
+  if (loading) return <div>Chargement des prompts...</div>
+  if (prompts.length === 0) return <div>Aucun prompt configuré.</div>
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <form onSubmit={handleSave} className="space-y-4">
-        <div>
-          <label className="block font-medium mb-1">Label</label>
-          <Input name="label" value={prompt.label} onChange={handleChange} required />
-        </div>
-        
-        <div>
-          <label className="block font-medium mb-1">Template du Prompt (Partie Éditable)</label>
-          <Textarea 
-            name="template" 
-            value={prompt.template} 
-            onChange={handleChange} 
-            rows={8} 
-            required 
-            className="font-mono text-sm"
-            placeholder="Utilisez {{category}}, {{country}}, {{options}} comme variables"
-          />
-          <p className="text-sm text-gray-600 mt-1">
-            Variables disponibles: <code>{'{{category}}'}</code>, <code>{'{{country}}'}</code>, <code>{'{{options}}'}</code>
-          </p>
-        </div>
+    <div className="space-y-8 max-w-4xl">
+      <h2 className="text-2xl font-bold mb-4">🎯 Configuration des Prompts Spécialisés</h2>
+      
+      {prompts.map((prompt) => (
+        <div key={prompt.id} className="border rounded-lg p-6 bg-white shadow-sm">
+          {/* Header avec type de recherche */}
+          <div className="mb-4 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-400">
+            <h3 className="font-semibold text-lg text-blue-800 mb-2">
+              {getSearchTypeLabel(prompt.searchType || '')}
+            </h3>
+            <p className="text-blue-700 text-sm">
+              {getSearchTypeDescription(prompt.searchType || '')}
+            </p>
+          </div>
 
-        <div>
-          <label className="block font-medium mb-1">Description</label>
-          <Textarea name="description" value={prompt.description || ''} onChange={handleChange} rows={3} />
-        </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block font-medium mb-1">Label</label>
+              <Input 
+                value={prompt.label} 
+                onChange={(e) => handleChange(prompt.id, 'label', e.target.value)}
+                required 
+              />
+            </div>
+            
+            <div>
+              <label className="block font-medium mb-1">Template du Prompt</label>
+              <Textarea 
+                value={prompt.template} 
+                onChange={(e) => handleChange(prompt.id, 'template', e.target.value)}
+                rows={12} 
+                required 
+                className="font-mono text-sm"
+                placeholder="Utilisez {{category}} et {{country}} comme variables"
+              />
+              <p className="text-sm text-gray-600 mt-1">
+                Variables disponibles: <code>{'{{category}}'}</code>, <code>{'{{country}}'}</code>
+              </p>
+            </div>
 
-        {error && <div className="text-red-500 text-sm">{error}</div>}
-        {success && <div className="text-green-600 text-sm">{success}</div>}
-        
-        <Button type="submit" disabled={saving}>
-          {saving ? 'Sauvegarde...' : 'Enregistrer'}
-        </Button>
-      </form>
+            <div>
+              <label className="block font-medium mb-1">Description</label>
+              <Textarea 
+                value={prompt.description || ''} 
+                onChange={(e) => handleChange(prompt.id, 'description', e.target.value)}
+                rows={2} 
+              />
+            </div>
+
+            <Button 
+              onClick={() => handleSave(prompt)}
+              disabled={saving === prompt.id}
+              className="w-full"
+            >
+              {saving === prompt.id ? 'Sauvegarde...' : `Enregistrer ${getSearchTypeLabel(prompt.searchType || '')}`}
+            </Button>
+          </div>
+        </div>
+      ))}
 
       {/* Zone Format de Sortie - Non Éditable */}
       <div className="border-t pt-6">
@@ -121,7 +178,7 @@ export default function PromptAdminEditor () {
             📋 Format de Sortie OpenAI (Non Modifiable)
           </h3>
           <p className="text-sm text-gray-600 mb-3">
-            Cette instruction est automatiquement ajoutée à votre prompt pour assurer la cohérence du format de réponse:
+            Cette instruction est automatiquement ajoutée à vos prompts pour assurer la cohérence du format de réponse:
           </p>
           <Textarea 
             value={OUTPUT_FORMAT_INSTRUCTION}
@@ -131,12 +188,16 @@ export default function PromptAdminEditor () {
           />
           <div className="mt-3 p-2 bg-blue-50 rounded border-l-4 border-blue-400">
             <p className="text-sm text-blue-800">
-              <strong>ℹ️ Information:</strong> Cette partie est automatiquement combinée avec votre template 
+              <strong>ℹ️ Information:</strong> Cette partie est automatiquement combinée avec vos templates 
               lors de l'envoi à OpenAI pour garantir un format de réponse cohérent.
             </p>
           </div>
         </div>
       </div>
+
+      {/* Messages de feedback */}
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">{error}</div>}
+      {success && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">{success}</div>}
     </div>
   )
 } 

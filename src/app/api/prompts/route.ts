@@ -11,29 +11,64 @@ const DEFAULT_PROMPT = {
   isActive: true,
 }
 
-// GET /api/prompts : liste tous les prompts (et crée le prompt principal si absent)
-export async function GET () {
-  let prompts = await prisma.promptTemplate.findMany({ orderBy: { createdAt: 'desc' } })
-  if (prompts.length === 0) {
-    const prompt = await prisma.promptTemplate.create({ data: DEFAULT_PROMPT })
-    prompts = [prompt]
+// GET /api/prompts : liste tous les prompts
+export async function GET(req: NextRequest) {
+  try {
+    console.log('🔍 GET /api/prompts - DÉBUT')
+    
+    const prompts = await prisma.promptTemplate.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        label: true,
+        template: true,
+        description: true,
+        searchType: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    })
+    
+    console.log('📋 Prompts trouvés:', prompts.length)
+    console.log('📝 Détails prompts:', prompts.map(p => ({ id: p.id, label: p.label, searchType: p.searchType })))
+    
+    return NextResponse.json({ prompts })
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération des prompts:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue'
+    return NextResponse.json({ error: 'Erreur serveur', details: errorMessage }, { status: 500 })
   }
-  return NextResponse.json({ prompts })
 }
 
 // POST /api/prompts : crée un nouveau prompt
-export async function POST (req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user || session.user.role !== 'admin') {
-    return NextResponse.json({ error: 'Non autorisé' }, { status: 403 })
+export async function POST(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user || session.user.role !== 'admin') {
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 403 })
+    }
+    
+    const body = await req.json()
+    const { label, template, description, searchType, isActive } = body
+    
+    if (!label || !template) {
+      return NextResponse.json({ error: 'Label et template requis' }, { status: 400 })
+    }
+    
+    const prompt = await prisma.promptTemplate.create({
+      data: {
+        label,
+        template,
+        description: description || null,
+        searchType: searchType || null,
+        isActive: isActive !== undefined ? isActive : true
+      }
+    })
+    
+    return NextResponse.json({ success: true, prompt })
+  } catch (error) {
+    console.error('Erreur lors de la création du prompt:', error)
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
-  const data = await req.json()
-  const { label, template, description, isActive } = data
-  if (!label || !template) {
-    return NextResponse.json({ error: 'Champs obligatoires manquants' }, { status: 400 })
-  }
-  const prompt = await prisma.promptTemplate.create({
-    data: { label, template, description, isActive: isActive ?? true }
-  })
-  return NextResponse.json({ prompt })
 } 
