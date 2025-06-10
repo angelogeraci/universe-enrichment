@@ -4,6 +4,21 @@ import prisma from '@/lib/prisma'
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
+// Instructions de format de sortie - ajoutées automatiquement au prompt
+const OUTPUT_FORMAT_INSTRUCTION = `
+
+IMPORTANT - FORMAT DE RÉPONSE REQUIS:
+Vous devez répondre uniquement avec un tableau JSON de chaînes de caractères, sans texte explicatif, sans balises markdown, sans formatage supplémentaire.
+
+Format attendu : ["item1", "item2", "item3"]
+
+Règles strictes :
+- Réponse UNIQUEMENT en format JSON array
+- Chaque élément est une chaîne de caractères
+- Pas de texte avant ou après le JSON
+- Pas de balises \`\`\`json ou autres
+- Maximum 50 éléments par réponse`
+
 export async function POST (req: NextRequest) {
   console.log('🔍 API ENRICHMENT - DÉBUT')
   
@@ -37,13 +52,17 @@ export async function POST (req: NextRequest) {
     
     console.log('📝 TEMPLATE BRUT:', promptTemplate.template)
     
-    // Génère le prompt dynamique
-    const prompt = promptTemplate.template
+    // Génère le prompt dynamique avec le template de l'admin
+    const userPrompt = promptTemplate.template
       .replace('{{category}}', category)
       .replace('{{country}}', country)
       .replace('{{options}}', options || '')
     
-    console.log('PROMPT ENVOYÉ À OPENAI:', prompt)
+    // Combine le prompt de l'admin avec les instructions de format automatiques
+    const fullPrompt = userPrompt + OUTPUT_FORMAT_INSTRUCTION
+    
+    console.log('📝 PROMPT UTILISATEUR:', userPrompt)
+    console.log('📝 PROMPT COMPLET ENVOYÉ À OPENAI:', fullPrompt)
     
     console.log('🤖 APPEL OPENAI EN COURS...')
     
@@ -51,8 +70,8 @@ export async function POST (req: NextRequest) {
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
-        { role: 'system', content: 'Tu es un assistant marketing expert.' },
-        { role: 'user', content: prompt }
+        { role: 'system', content: 'Tu es un assistant marketing expert. Tu suis scrupuleusement les instructions de format.' },
+        { role: 'user', content: fullPrompt }
       ]
     })
     
