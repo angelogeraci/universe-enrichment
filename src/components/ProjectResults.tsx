@@ -302,6 +302,30 @@ export function ProjectResults ({
     }
   }
 
+  // Relancer le check de suggestion pour la sélection
+  const handleUpdateSelected = async () => {
+    if (selected.length === 0) return
+    if (!window.confirm(`Relancer la récupération des suggestions Facebook pour ${selected.length} critère(s) ?`)) return
+    try {
+      const results = await Promise.all(selected.map(id =>
+        fetch('/api/facebook/suggestions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ critereId: id })
+        })
+      ))
+      const allOk = results.every(r => r.ok)
+      if (allOk) {
+        success(`${selected.length} critère(s) mis à jour`)
+      } else {
+        showError('Erreur lors de la mise à jour de certains critères')
+      }
+      window.location.reload()
+    } catch (e) {
+      showError('Erreur lors de la mise à jour')
+    }
+  }
+
   // Si onlyMetrics, afficher seulement les cards
   if (onlyMetrics) {
     return (
@@ -404,9 +428,16 @@ export function ProjectResults ({
                 <Button size="sm" variant="default" onClick={handleExportXLSX}>
                   Exporter en XLSX
                 </Button>
-                <Button size="sm" variant="destructive" onClick={handleDeleteSelected} disabled={selected.length === 0}>
-                  <Trash2 size={16} className="mr-2" /> Supprimer la sélection
-                </Button>
+                {selected.length > 0 && (
+                  <>
+                    <Button size="sm" variant="secondary" onClick={handleUpdateSelected}>
+                      <RefreshCw size={16} className="mr-2" /> Update ({selected.length})
+                    </Button>
+                    <Button size="sm" variant="destructive" onClick={handleDeleteSelected}>
+                      <Trash2 size={16} className="mr-2" /> Supprimer ({selected.length})
+                    </Button>
+                  </>
+                )}
               </div>
               <div className="text-sm text-muted-foreground">
                 {selected.length > 0 && `${selected.length} selected • `}{filtered.length} criteria
@@ -702,9 +733,16 @@ export function ProjectResults ({
               <Button size="sm" variant="default" onClick={handleExportXLSX}>
                 Exporter en XLSX
               </Button>
-              <Button size="sm" variant="destructive" onClick={handleDeleteSelected} disabled={selected.length === 0}>
-                <Trash2 size={16} className="mr-2" /> Supprimer la sélection
-              </Button>
+              {selected.length > 0 && (
+                <>
+                  <Button size="sm" variant="secondary" onClick={handleUpdateSelected}>
+                    <RefreshCw size={16} className="mr-2" /> Update ({selected.length})
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={handleDeleteSelected}>
+                    <Trash2 size={16} className="mr-2" /> Supprimer ({selected.length})
+                  </Button>
+                </>
+              )}
             </div>
             <div className="text-sm text-muted-foreground">
               {selected.length > 0 && `${selected.length} selected • `}{filtered.length} criteria
