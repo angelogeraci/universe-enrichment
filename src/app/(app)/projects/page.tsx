@@ -19,6 +19,7 @@ import { format } from "date-fns"
 import CreateProjectModal, { Project } from "@/components/CreateProjectModal"
 import DeleteConfirmModal from "@/components/DeleteConfirmModal"
 import StatusTag from '@/components/StatusTag'
+import { useToast } from '@/hooks/useToast'
 
 // --- Mock data type ---
 export type { Project } from "@/components/CreateProjectModal"
@@ -60,33 +61,29 @@ const statusColor: Record<Project["progressStatus"], string> = {
 export default function ProjectsPage() {
   const router = useRouter()
   const [projects, setProjects] = useState<Project[]>([])
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const { success, error: showError, warning } = useToast()
 
   const fetchProjects = async () => {
-    setLoading(true)
-    setError(null)
     try {
-      const res = await fetch('/api/projects')
-      if (!res.ok) throw new Error('Erreur lors du chargement des projets')
-      const data = await res.json()
-      // Adapter les projets pour le tableau
-      const mapped = (data.projects || []).map((p: any) => ({
-        id: p.id,
-        slug: p.slug,
-        country: p.country,
-        countryFlag: p.country ? String.fromCodePoint(...[...p.country.toUpperCase()].map(c => 127397 + c.charCodeAt(0))) : '',
-        name: p.name,
-        description: p.description,
-        criteriaMatchCount: p.criteriaMatchCount ?? '-',
-        enrichmentStatus: p.enrichmentStatus as 'pending' | 'done',
-        createdAt: p.createdAt,
-      }))
-      setProjects(mapped)
-    } catch (e: any) {
-      setError(e.message)
+      setLoading(true)
+      const response = await fetch('/api/projects')
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Erreur lors du chargement des projets')
+      }
+      
+      const data = await response.json()
+      setProjects(data.projects || [])
+      setError('')
+    } catch (err: any) {
+      const errorMessage = err.message || 'Erreur lors du chargement des projets'
+      setError(errorMessage)
+      showError(errorMessage, { duration: 6000 })
     } finally {
       setLoading(false)
     }
@@ -96,23 +93,24 @@ export default function ProjectsPage() {
     fetchProjects()
   }, [])
 
-  // Fonction pour supprimer un projet avec confirmation
+  // Fonction pour supprimer un projet individuel avec confirmation
   const handleDeleteProject = async (projectId: string, projectName: string) => {
     setDeletingId(projectId)
     try {
       const response = await fetch(`/api/projects/id/${projectId}`, {
         method: 'DELETE',
       })
-
+      
       if (!response.ok) {
-        throw new Error('Erreur lors de la suppression')
+        const errorData = await response.json()
+        throw new Error(errorData.error || `Erreur lors de la suppression du projet "${projectName}"`)
       }
-
-      // Rafraîchir la liste des projets
+      
+      success(`Projet "${projectName}" supprimé avec succès`, { duration: 4000 })
       await fetchProjects()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur lors de la suppression du projet:', error)
-      alert('Erreur lors de la suppression du projet')
+      showError(error.message || `Erreur lors de la suppression du projet "${projectName}"`, { duration: 6000 })
     } finally {
       setDeletingId(null)
     }
@@ -122,15 +120,34 @@ export default function ProjectsPage() {
   const handleDeleteSelected = async () => {
     const selectedRowIndexes = Object.keys(rowSelection)
     const selectedProjectIds = selectedRowIndexes.map(index => projects[parseInt(index)].id)
+    const selectedCount = selectedProjectIds.length
     
     try {
+      let successCount = 0
+      let failedCount = 0
+      
       for (const projectId of selectedProjectIds) {
-        const response = await fetch(`/api/projects/id/${projectId}`, {
-          method: 'DELETE',
-        })
-        if (!response.ok) {
-          throw new Error(`Erreur lors de la suppression du projet ${projectId}`)
+        try {
+          const response = await fetch(`/api/projects/id/${projectId}`, {
+            method: 'DELETE',
+          })
+          if (!response.ok) {
+            failedCount++
+          } else {
+            successCount++
+          }
+        } catch {
+          failedCount++
         }
+      }
+      
+      // Messages de résultat
+      if (successCount > 0 && failedCount === 0) {
+        success(`${successCount} projet(s) supprimé(s) avec succès`, { duration: 4000 })
+      } else if (successCount > 0 && failedCount > 0) {
+        warning(`${successCount} projet(s) supprimé(s), ${failedCount} échec(s)`, { duration: 5000 })
+      } else {
+        showError(`Échec de la suppression des ${selectedCount} projet(s)`, { duration: 6000 })
       }
       
       // Rafraîchir la liste et réinitialiser la sélection
@@ -138,7 +155,7 @@ export default function ProjectsPage() {
       setRowSelection({})
     } catch (error) {
       console.error('Erreur lors de la suppression des projets:', error)
-      alert('Erreur lors de la suppression des projets')
+      showError('Erreur lors de la suppression des projets sélectionnés', { duration: 6000 })
     }
   }
 

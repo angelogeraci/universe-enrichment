@@ -7,6 +7,8 @@ import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Checkbox } from './ui/checkbox'
 import { Badge } from './ui/badge'
+import { useToast } from '@/hooks/useToast'
+import * as XLSX from 'xlsx'
 
 export type Critere = {
   id: string
@@ -26,12 +28,31 @@ export type Critere = {
   }>
 }
 
+// Helper pour formater les nombres d'audience
+function formatAudience(audience: number): string {
+  if (audience >= 1000000) {
+    return `${(audience / 1000000).toFixed(1)}M`
+  } else if (audience >= 1000) {
+    return `${(audience / 1000).toFixed(0)}K`
+  }
+  return audience.toString()
+}
+
+// Fonction utilitaire pour rendre le path robuste
+const getCategoryPathString = (cat: any) => {
+  if (!cat?.path) return ''
+  if (Array.isArray(cat.path)) return cat.path.join(' -- ')
+  if (typeof cat.path === 'string') return cat.path
+  return ''
+}
+
 export function ProjectResults ({
   isComplete = false,
   metrics = {
     aiCriteria: 0,
     withFacebook: 0,
-    valid: 0
+    valid: 0,
+    totalCategories: undefined
   },
   progress = {
     current: 0,
@@ -42,19 +63,94 @@ export function ProjectResults ({
   },
   onlyMetrics = false,
   onlyProgress = false,
-  criteriaData = []
+  criteriaData = [],
+  categoriesData = []
 }: {
   isComplete?: boolean
-  metrics?: { aiCriteria: number, withFacebook: number, valid: number }
+  metrics?: { aiCriteria: number, withFacebook: number, valid: number, totalCategories?: number }
   progress?: { current: number, total: number, step: string, errors: number, eta: string }
   onlyMetrics?: boolean
   onlyProgress?: boolean
   criteriaData?: Critere[]
+  categoriesData?: Array<{ name: string, path: string[], andCriteria?: string[] }>
 }) {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<'label' | 'category' | 'status'>('label')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [loadingFacebook, setLoadingFacebook] = useState<{ [key: string]: boolean }>({})
+  const [openDropdowns, setOpenDropdowns] = useState<{ [key: string]: boolean }>({})
+  const { success, error: showError } = useToast()
+
+  // Fonction pour sélectionner une suggestion spécifique
+  const handleSelectSuggestion = async (critereId: string, suggestionId: string) => {
+    try {
+      const response = await fetch(`/api/facebook/suggestions/${critereId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ suggestionId })
+      })
+
+      if (!response.ok) {
+        throw new Error('Erreur lors de la sélection de la suggestion')
+      }
+
+      success('Suggestion sélectionnée avec succès')
+      // Recharger les données
+      window.location.reload()
+    } catch (error: any) {
+      console.error('❌ Erreur sélection suggestion:', error)
+      showError(error.message || 'Erreur lors de la sélection')
+    }
+  }
+
+  // Fonction pour basculer l'état du dropdown
+  const toggleDropdown = (critereId: string) => {
+    setOpenDropdowns(prev => ({
+      ...prev,
+      [critereId]: !prev[critereId]
+    }))
+  }
+
+  // Récupérer les suggestions Facebook pour un critère
+  const handleGetFacebookSuggestions = async (critere: Critere) => {
+    setLoadingFacebook(prev => ({ ...prev, [critere.id]: true }))
+    
+    try {
+      console.log(`🔍 Récupération suggestions Facebook pour: "${critere.label}"`)
+      
+      const response = await fetch('/api/facebook/suggestions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          critereId: critere.id,
+          query: critere.label,
+          country: critere.country
+        })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Erreur lors de la récupération des suggestions')
+      }
+      
+      const data = await response.json()
+      success(`${data.suggestions.length} suggestions récupérées pour "${critere.label}"`, { duration: 3000 })
+      
+      // Recharger les données pour voir les nouvelles suggestions
+      window.location.reload()
+      
+    } catch (error: any) {
+      console.error('❌ Erreur suggestions Facebook:', error)
+      showError(error.message || 'Erreur lors de la récupération des suggestions Facebook', { duration: 5000 })
+    } finally {
+      setLoadingFacebook(prev => ({ ...prev, [critere.id]: false }))
+    }
+  }
 
   // Filtrage et tri
   const filtered = useMemo(() => {
@@ -80,48 +176,125 @@ export function ProjectResults ({
 
   // Ref pour la checkbox "select all" (Radix UI = bouton)
   const selectAllRef = useRef<HTMLButtonElement>(null)
+
+  // Gestion état indeterminé de la checkbox "select all"
   useEffect(() => {
     if (selectAllRef.current) {
-      // Radix UI Checkbox est un bouton, l'input réel est dans le shadow DOM
-      const input = selectAllRef.current.querySelector('input[type="checkbox"]') as HTMLInputElement | null
-      if (input) {
-        input.indeterminate = selected.length > 0 && selected.length < filtered.length
-      }
+      const isIndeterminate = selected.length > 0 && selected.length < filtered.length
+      selectAllRef.current.setAttribute('data-state', isIndeterminate ? 'indeterminate' : selected.length === filtered.length ? 'checked' : 'unchecked')
     }
   }, [selected, filtered])
 
-  // Mode spécial onlyMetrics pour rétrocompatibilité
+  // Fermer les dropdowns quand on clique en dehors
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (!target.closest('.relative')) {
+        setOpenDropdowns({})
+      }
+    }
+
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [])
+
+  // Fonction d'export XLSX
+  const handleExportXLSX = () => {
+    const header = [
+      'Path',
+      'Name',
+      'Category',
+      'Exclusion',
+      'Level 1',
+      'Level 2',
+    ]
+    const rows = filtered.flatMap(critere => {
+      if (!critere.suggestions || critere.suggestions.length === 0) return []
+      // Prendre la suggestion sélectionnée, sinon best match, sinon la première
+      const selected = critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0]
+      // Trouver la catégorie correspondante
+      const cat = categoriesData?.find(cat => {
+        // On compare le path complet (string ou array)
+        const criterePath = Array.isArray(critere.categoryPath) ? critere.categoryPath.join(' -- ') : critere.categoryPath
+        const catPath = getCategoryPathString(cat)
+        return criterePath === catPath
+      })
+      // Path complet = path catégorie + suggestion
+      const path = getCategoryPathString(cat) + (selected ? ' -- ' + selected.label : '')
+      // Level 2 = andCriteria (array ou string)
+      let level2 = ''
+      if (cat?.andCriteria) {
+        if (Array.isArray(cat.andCriteria)) level2 = cat.andCriteria.join(', ')
+        else if (typeof cat.andCriteria === 'string') level2 = cat.andCriteria
+      }
+      return [[
+        path,
+        selected.label,
+        critere.category,
+        '',
+        selected.label,
+        level2
+      ]]
+    })
+    console.log('Export XLSX - lignes exportées:', rows.length)
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Export')
+    XLSX.writeFile(wb, 'export-suggestions.xlsx')
+  }
+
+  // Calcul dynamique des métriques à partir de criteriaData
+  const aiCriteriaCount = criteriaData.length
+  const withFacebookCount = criteriaData.filter(c => c.suggestions && c.suggestions.length > 0).length
+  const validCriteriaCount = criteriaData.filter(critere => {
+    if (!critere.suggestions || critere.suggestions.length === 0) return false
+    const mainSuggestion = critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0]
+    return mainSuggestion && mainSuggestion.similarityScore >= 50
+  }).length
+
+  // Si onlyMetrics, afficher seulement les cards
   if (onlyMetrics) {
     return (
-      <>
-        <Card>
-          <CardHeader>
-            <CardTitle>AI criteria</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold">{metrics.aiCriteria}</div>
-            <div className="text-muted-foreground text-sm mt-1">Proposed by AI</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>With Facebook suggestion</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold">{metrics.withFacebook}</div>
-            <div className="text-muted-foreground text-sm mt-1">With at least one Facebook match</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Valid criteria</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold">{metrics.valid}</div>
-            <div className="text-muted-foreground text-sm mt-1">Score &gt; 80</div>
-          </CardContent>
-        </Card>
-      </>
+      <div className="w-full max-w-none space-y-4">
+        <div className="flex flex-col md:flex-row gap-6 w-full max-w-none items-stretch h-[220px] min-h-[220px]">
+          <Card className="flex-1 min-w-0 w-full max-w-none shadow-md border-2 flex flex-col h-[220px] min-h-[220px] justify-between">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">AI criteria</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col flex-1 justify-end items-center p-0 m-0">
+              <div className="text-4xl font-bold text-primary">{aiCriteriaCount}</div>
+              <div className="text-muted-foreground text-sm whitespace-nowrap">Proposed by AI</div>
+            </CardContent>
+          </Card>
+          <Card className="flex-1 min-w-0 w-full max-w-none shadow-md border-2 flex flex-col h-[220px] min-h-[220px] justify-between">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">With Facebook suggestion</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col flex-1 justify-end items-center p-0 m-0">
+              <div className="text-4xl font-bold text-primary">{withFacebookCount}</div>
+              <div className="text-muted-foreground text-sm whitespace-nowrap">Found suggestions</div>
+            </CardContent>
+          </Card>
+          <Card className="flex-1 min-w-0 w-full max-w-none shadow-md border-2 flex flex-col h-[220px] min-h-[220px] justify-between">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Valid criteria</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col flex-1 justify-end items-center p-0 m-0">
+              <div className="text-4xl font-bold text-primary">{validCriteriaCount}</div>
+              <div className="text-muted-foreground text-sm whitespace-nowrap">Score {'\u2265'} 50</div>
+            </CardContent>
+          </Card>
+          <Card className="flex-1 min-w-0 w-full max-w-none shadow-md border-2 flex flex-col h-[220px] min-h-[220px] justify-between">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Total categories</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col flex-1 justify-end items-center p-0 m-0">
+              <div className="text-4xl font-bold text-primary">{metrics.totalCategories ?? 0}</div>
+              <div className="text-muted-foreground text-sm whitespace-nowrap">Categories in project</div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     )
   }
 
@@ -151,37 +324,50 @@ export function ProjectResults ({
 
         {/* Tableau des critères - affiché dès qu'il y a des critères */}
         {criteriaData.length > 0 && (
-          <div className="w-full bg-white rounded-lg border p-4 mt-4">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
-              <Input
-                placeholder="Search criteria..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full md:w-64"
-              />
-              <div className="flex gap-2 mt-2 md:mt-0">
-                <Button size="sm" variant="outline" onClick={selectAll}>Select all</Button>
-                <Button size="sm" variant="outline" onClick={deselectAll}>Deselect all</Button>
+          <div className="w-full">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-4">
+                <Input
+                  type="text"
+                  placeholder="Rechercher par nom ou catégorie..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-64"
+                />
+                <Button size="sm" variant="outline" onClick={selectAll}>Tout sélectionner</Button>
+                <Button size="sm" variant="outline" onClick={deselectAll}>Tout désélectionner</Button>
+                <Button size="sm" variant="default" onClick={handleExportXLSX}>
+                  Exporter en XLSX
+                </Button>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {selected.length > 0 && `${selected.length} selected • `}{filtered.length} criteria
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm border">
-                <thead className="bg-muted">
+
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-muted/50">
                   <tr>
-                    <th className="px-2 py-2">
-                      <Checkbox
-                        ref={selectAllRef}
-                        checked={selected.length === filtered.length && filtered.length > 0}
-                        onCheckedChange={v => v ? selectAll() : deselectAll()}
-                      />
+                    <th className="px-2 py-3 text-left w-[50px]">
+                      <Checkbox ref={selectAllRef} checked={selected.length === filtered.length} onCheckedChange={checked => checked ? selectAll() : deselectAll()} />
                     </th>
-                    <th className="px-2 py-2 cursor-pointer" onClick={() => setSortBy('label')}>Label {sortBy === 'label' && (sortDir === 'asc' ? '▲' : '▼')}</th>
-                    <th className="px-2 py-2 cursor-pointer" onClick={() => setSortBy('category')}>Category {sortBy === 'category' && (sortDir === 'asc' ? '▲' : '▼')}</th>
-                    <th className="px-2 py-2 cursor-pointer" onClick={() => setSortBy('status')}>Status {sortBy === 'status' && (sortDir === 'asc' ? '▲' : '▼')}</th>
-                    <th className="px-2 py-2">Facebook Suggestions</th>
-                    <th className="px-2 py-2">Actions</th>
+                    <th className="px-2 py-3 text-left cursor-pointer hover:bg-muted/70" onClick={() => { setSortBy('label'); setSortDir(sortBy === 'label' && sortDir === 'asc' ? 'desc' : 'asc') }}>
+                      Nom {sortBy === 'label' && (sortDir === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th className="px-2 py-3 text-left cursor-pointer hover:bg-muted/70" onClick={() => { setSortBy('category'); setSortDir(sortBy === 'category' && sortDir === 'asc' ? 'desc' : 'asc') }}>
+                      Catégorie {sortBy === 'category' && (sortDir === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th className="px-2 py-3 text-left cursor-pointer hover:bg-muted/70" onClick={() => { setSortBy('status'); setSortDir(sortBy === 'status' && sortDir === 'asc' ? 'desc' : 'asc') }}>
+                      Status {sortBy === 'status' && (sortDir === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th className="px-2 py-3 text-left">Suggestion Facebook</th>
+                    <th className="px-2 py-3 text-left">Score</th>
+                    <th className="px-2 py-3 text-left">Audience</th>
+                    <th className="px-2 py-3 text-left">Actions</th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {filtered.map(critere => (
                     <tr key={critere.id} className={selected.includes(critere.id) ? 'bg-blue-50' : ''}>
@@ -191,27 +377,162 @@ export function ProjectResults ({
                       <td className="px-2 py-2">
                         <Badge variant={critere.status === 'valid' ? 'default' : critere.status === 'pending' ? 'secondary' : 'secondary'}>{critere.status}</Badge>
                       </td>
+                      
+                      {/* Colonne Suggestion Facebook avec dropdown */}
                       <td className="px-2 py-2">
                         {critere.suggestions && critere.suggestions.length > 0 ? (
-                          <div className="flex flex-col gap-1">
-                            {critere.suggestions.map(s => (
-                              <span key={s.id} className={s.isBestMatch ? 'font-bold text-green-700' : ''}>
-                                {s.label} <span className="text-xs text-muted-foreground">({s.audience})</span> {s.isBestMatch && <Badge variant="default">Best</Badge>}
-                              </span>
-                            ))}
+                          <div className="relative">
+                            {/* Suggestion principale affichée */}
+                            <div 
+                              className={(() => {
+                                const mainSuggestion = critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0]
+                                if (mainSuggestion && mainSuggestion.similarityScore < 50) {
+                                  return 'p-2 rounded border bg-red-50 border-red-300 text-red-600 cursor-not-allowed opacity-60'
+                                }
+                                return `cursor-pointer p-2 rounded border ${
+                                  critere.suggestions.find(s => s.isSelectedByUser || s.isBestMatch)?.isSelectedByUser 
+                                    ? 'bg-blue-100 border-blue-300' 
+                                    : critere.suggestions.find(s => s.isBestMatch)?.isBestMatch 
+                                      ? 'bg-green-100 border-green-300' 
+                                      : 'bg-gray-100 border-gray-300'
+                                } hover:bg-opacity-80 transition-colors`
+                              })()}
+                              onClick={() => {
+                                const mainSuggestion = critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0]
+                                if (mainSuggestion && mainSuggestion.similarityScore < 50) return
+                                toggleDropdown(critere.id)
+                              }}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-sm truncate max-w-[200px]">
+                                  {(critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0])?.label}
+                                  {/* Badge non pertinent si score < 50% */}
+                                  {(() => {
+                                    const mainSuggestion = critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0]
+                                    if (mainSuggestion && mainSuggestion.similarityScore < 50) {
+                                      return <span className="ml-2 text-xs text-red-600 font-semibold">Non pertinent</span>
+                                    }
+                                    return null
+                                  })()}
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  {critere.suggestions.find(s => s.isSelectedByUser) && <Badge variant="outline" className="text-xs px-1 py-0">Selected</Badge>}
+                                  {!critere.suggestions.find(s => s.isSelectedByUser) && critere.suggestions.find(s => s.isBestMatch) && <Badge variant="default" className="text-xs px-1 py-0">Best</Badge>}
+                                  <span className="text-xs">▼</span>
+                                </div>
+                              </div>
+                              {critere.suggestions.length > 1 && (
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  {critere.suggestions.length} suggestions disponibles
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Dropdown avec toutes les suggestions */}
+                            {openDropdowns[critere.id] && (
+                              <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                                {critere.suggestions.map((suggestion, index) => {
+                                  // Détermination de la pertinence basée sur le score
+                                  const isHighQuality = suggestion.similarityScore >= 60
+                                  const isMediumQuality = suggestion.similarityScore >= 30
+                                  const isLowQuality = suggestion.similarityScore < 30
+                                  
+                                  return (
+                                    <div
+                                      key={suggestion.id}
+                                      className={`p-3 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer ${
+                                        suggestion.isSelectedByUser ? 'bg-blue-50' : suggestion.isBestMatch ? 'bg-green-50' : ''
+                                      } ${isLowQuality ? 'opacity-60' : ''}`}
+                                      onClick={() => {
+                                        handleSelectSuggestion(critere.id, suggestion.id)
+                                        toggleDropdown(critere.id)
+                                      }}
+                                    >
+                                      <div className="flex items-start justify-between">
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2">
+                                            <div className="font-medium text-sm truncate">{suggestion.label}</div>
+                                            {/* Indicateur de qualité */}
+                                            {isHighQuality && <div className="w-2 h-2 bg-green-500 rounded-full" title="Haute qualité"></div>}
+                                            {isMediumQuality && !isHighQuality && <div className="w-2 h-2 bg-yellow-500 rounded-full" title="Qualité moyenne"></div>}
+                                            {isLowQuality && <div className="w-2 h-2 bg-red-500 rounded-full" title="Faible qualité - Non pertinente"></div>}
+                                          </div>
+                                          <div className="text-xs text-muted-foreground mt-1">
+                                            Score: {suggestion.similarityScore}% • 
+                                            Audience: {formatAudience(suggestion.audience)} • 
+                                            Type: interest
+                                            {isLowQuality && <span className="text-red-600 font-medium"> • NON PERTINENTE</span>}
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-1 ml-2">
+                                          {suggestion.isSelectedByUser && <Badge variant="outline" className="text-xs px-1 py-0">Selected</Badge>}
+                                          {suggestion.isBestMatch && <Badge variant="default" className="text-xs px-1 py-0">Best</Badge>}
+                                          {isLowQuality && <Badge variant="destructive" className="text-xs px-1 py-0">Low</Badge>}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
                           </div>
                         ) : (
-                          <span className="text-muted-foreground">No suggestion</span>
+                          <span className="text-muted-foreground text-sm">Aucune suggestion</span>
                         )}
                       </td>
+
+                      {/* Colonne Score */}
                       <td className="px-2 py-2">
-                        <Button size="sm" variant="outline">Edit</Button>
-                        <Button size="sm" variant="destructive" className="ml-2">Delete</Button>
+                        {critere.suggestions && critere.suggestions.length > 0 ? (
+                          <div className="flex items-center gap-2">
+                            <div className="font-mono text-sm">
+                              {(critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0])?.similarityScore}%
+                            </div>
+                            {/* Indicateur visuel de qualité dans la colonne score */}
+                            {(() => {
+                              const currentSuggestion = critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0]
+                              if (!currentSuggestion) return null
+                              
+                              const score = currentSuggestion.similarityScore
+                              if (score >= 60) return <div className="w-2 h-2 bg-green-500 rounded-full" title="Haute qualité"></div>
+                              if (score >= 30) return <div className="w-2 h-2 bg-yellow-500 rounded-full" title="Qualité moyenne"></div>
+                              return <div className="w-2 h-2 bg-red-500 rounded-full" title="Faible qualité"></div>
+                            })()}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </td>
+
+                      {/* Colonne Audience */}
+                      <td className="px-2 py-2">
+                        {critere.suggestions && critere.suggestions.length > 0 ? (
+                          <div className="font-mono text-sm">
+                            {formatAudience((critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0])?.audience || 0)}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </td>
+
+                      <td className="px-2 py-2">
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            disabled={loadingFacebook[critere.id]}
+                            onClick={() => handleGetFacebookSuggestions(critere)}
+                          >
+                            {loadingFacebook[critere.id] ? 'Chargement...' : 'Get Facebook'}
+                          </Button>
+                          <Button size="sm" variant="outline">Edit</Button>
+                          <Button size="sm" variant="destructive">Delete</Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                   {filtered.length === 0 && (
-                    <tr><td colSpan={6} className="text-center py-4 text-muted-foreground">No criteria found.</td></tr>
+                    <tr><td colSpan={8} className="text-center py-4 text-muted-foreground">No criteria found.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -226,34 +547,45 @@ export function ProjectResults ({
   return (
     <div className="w-full flex flex-col gap-8 mt-8">
       {/* Cards de métriques - toujours affichées */}
-      <div className="w-full flex flex-col md:flex-row gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>AI criteria</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold">{metrics.aiCriteria}</div>
-            <div className="text-muted-foreground text-sm mt-1">Proposed by AI</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>With Facebook suggestion</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold">{metrics.withFacebook}</div>
-            <div className="text-muted-foreground text-sm mt-1">With at least one Facebook match</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Valid criteria</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold">{metrics.valid}</div>
-            <div className="text-muted-foreground text-sm mt-1">Score &gt; 80</div>
-          </CardContent>
-        </Card>
+      <div className="w-full max-w-none space-y-4">
+        <div className="flex flex-col md:flex-row gap-6 w-full max-w-none items-stretch h-[220px] min-h-[220px]">
+          <Card className="flex-1 min-w-0 w-full max-w-none shadow-md border-2 flex flex-col h-[220px] min-h-[220px] justify-between">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">AI criteria</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col flex-1 justify-end items-center p-0 m-0">
+              <div className="text-4xl font-bold text-primary">{aiCriteriaCount}</div>
+              <div className="text-muted-foreground text-sm whitespace-nowrap">Proposed by AI</div>
+            </CardContent>
+          </Card>
+          <Card className="flex-1 min-w-0 w-full max-w-none shadow-md border-2 flex flex-col h-[220px] min-h-[220px] justify-between">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">With Facebook suggestion</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col flex-1 justify-end items-center p-0 m-0">
+              <div className="text-4xl font-bold text-primary">{withFacebookCount}</div>
+              <div className="text-muted-foreground text-sm whitespace-nowrap">Found suggestions</div>
+            </CardContent>
+          </Card>
+          <Card className="flex-1 min-w-0 w-full max-w-none shadow-md border-2 flex flex-col h-[220px] min-h-[220px] justify-between">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Valid criteria</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col flex-1 justify-end items-center p-0 m-0">
+              <div className="text-4xl font-bold text-primary">{validCriteriaCount}</div>
+              <div className="text-muted-foreground text-sm whitespace-nowrap">Score {'\u2265'} 50</div>
+            </CardContent>
+          </Card>
+          <Card className="flex-1 min-w-0 w-full max-w-none shadow-md border-2 flex flex-col h-[220px] min-h-[220px] justify-between">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Total categories</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col flex-1 justify-end items-center p-0 m-0">
+              <div className="text-4xl font-bold text-primary">{metrics.totalCategories ?? 0}</div>
+              <div className="text-muted-foreground text-sm whitespace-nowrap">Categories in project</div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Barre de progression - toujours affichée */}
@@ -278,37 +610,50 @@ export function ProjectResults ({
 
       {/* Tableau des critères - affiché dès qu'il y a des critères */}
       {criteriaData.length > 0 && (
-        <div className="w-full bg-white rounded-lg border p-4 mt-4">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
-            <Input
-              placeholder="Search criteria..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full md:w-64"
-            />
-            <div className="flex gap-2 mt-2 md:mt-0">
-              <Button size="sm" variant="outline" onClick={selectAll}>Select all</Button>
-              <Button size="sm" variant="outline" onClick={deselectAll}>Deselect all</Button>
+        <div className="w-full">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-4">
+              <Input
+                type="text"
+                placeholder="Rechercher par nom ou catégorie..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-64"
+              />
+              <Button size="sm" variant="outline" onClick={selectAll}>Tout sélectionner</Button>
+              <Button size="sm" variant="outline" onClick={deselectAll}>Tout désélectionner</Button>
+              <Button size="sm" variant="default" onClick={handleExportXLSX}>
+                Exporter en XLSX
+              </Button>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {selected.length > 0 && `${selected.length} selected • `}{filtered.length} criteria
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm border">
-              <thead className="bg-muted">
+
+          <div className="border rounded-lg overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-muted/50">
                 <tr>
-                  <th className="px-2 py-2">
-                    <Checkbox
-                      ref={selectAllRef}
-                      checked={selected.length === filtered.length && filtered.length > 0}
-                      onCheckedChange={v => v ? selectAll() : deselectAll()}
-                    />
+                  <th className="px-2 py-3 text-left w-[50px]">
+                    <Checkbox ref={selectAllRef} checked={selected.length === filtered.length} onCheckedChange={checked => checked ? selectAll() : deselectAll()} />
                   </th>
-                  <th className="px-2 py-2 cursor-pointer" onClick={() => setSortBy('label')}>Label {sortBy === 'label' && (sortDir === 'asc' ? '▲' : '▼')}</th>
-                  <th className="px-2 py-2 cursor-pointer" onClick={() => setSortBy('category')}>Category {sortBy === 'category' && (sortDir === 'asc' ? '▲' : '▼')}</th>
-                  <th className="px-2 py-2 cursor-pointer" onClick={() => setSortBy('status')}>Status {sortBy === 'status' && (sortDir === 'asc' ? '▲' : '▼')}</th>
-                  <th className="px-2 py-2">Facebook Suggestions</th>
-                  <th className="px-2 py-2">Actions</th>
+                  <th className="px-2 py-3 text-left cursor-pointer hover:bg-muted/70" onClick={() => { setSortBy('label'); setSortDir(sortBy === 'label' && sortDir === 'asc' ? 'desc' : 'asc') }}>
+                    Nom {sortBy === 'label' && (sortDir === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th className="px-2 py-3 text-left cursor-pointer hover:bg-muted/70" onClick={() => { setSortBy('category'); setSortDir(sortBy === 'category' && sortDir === 'asc' ? 'desc' : 'asc') }}>
+                    Catégorie {sortBy === 'category' && (sortDir === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th className="px-2 py-3 text-left cursor-pointer hover:bg-muted/70" onClick={() => { setSortBy('status'); setSortDir(sortBy === 'status' && sortDir === 'asc' ? 'desc' : 'asc') }}>
+                    Status {sortBy === 'status' && (sortDir === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th className="px-2 py-3 text-left">Suggestion Facebook</th>
+                  <th className="px-2 py-3 text-left">Score</th>
+                  <th className="px-2 py-3 text-left">Audience</th>
+                  <th className="px-2 py-3 text-left">Actions</th>
                 </tr>
               </thead>
+
               <tbody>
                 {filtered.map(critere => (
                   <tr key={critere.id} className={selected.includes(critere.id) ? 'bg-blue-50' : ''}>
@@ -318,27 +663,162 @@ export function ProjectResults ({
                     <td className="px-2 py-2">
                       <Badge variant={critere.status === 'valid' ? 'default' : critere.status === 'pending' ? 'secondary' : 'secondary'}>{critere.status}</Badge>
                     </td>
+                    
+                    {/* Colonne Suggestion Facebook avec dropdown */}
                     <td className="px-2 py-2">
                       {critere.suggestions && critere.suggestions.length > 0 ? (
-                        <div className="flex flex-col gap-1">
-                          {critere.suggestions.map(s => (
-                            <span key={s.id} className={s.isBestMatch ? 'font-bold text-green-700' : ''}>
-                              {s.label} <span className="text-xs text-muted-foreground">({s.audience})</span> {s.isBestMatch && <Badge variant="default">Best</Badge>}
-                            </span>
-                          ))}
+                        <div className="relative">
+                          {/* Suggestion principale affichée */}
+                          <div 
+                            className={(() => {
+                              const mainSuggestion = critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0]
+                              if (mainSuggestion && mainSuggestion.similarityScore < 50) {
+                                return 'p-2 rounded border bg-red-50 border-red-300 text-red-600 cursor-not-allowed opacity-60'
+                              }
+                              return `cursor-pointer p-2 rounded border ${
+                                critere.suggestions.find(s => s.isSelectedByUser || s.isBestMatch)?.isSelectedByUser 
+                                  ? 'bg-blue-100 border-blue-300' 
+                                  : critere.suggestions.find(s => s.isBestMatch)?.isBestMatch 
+                                    ? 'bg-green-100 border-green-300' 
+                                    : 'bg-gray-100 border-gray-300'
+                              } hover:bg-opacity-80 transition-colors`
+                            })()}
+                            onClick={() => {
+                              const mainSuggestion = critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0]
+                              if (mainSuggestion && mainSuggestion.similarityScore < 50) return
+                              toggleDropdown(critere.id)
+                            }}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-sm truncate max-w-[200px]">
+                                {(critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0])?.label}
+                                {/* Badge non pertinent si score < 50% */}
+                                {(() => {
+                                  const mainSuggestion = critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0]
+                                  if (mainSuggestion && mainSuggestion.similarityScore < 50) {
+                                    return <span className="ml-2 text-xs text-red-600 font-semibold">Non pertinent</span>
+                                  }
+                                  return null
+                                })()}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                {critere.suggestions.find(s => s.isSelectedByUser) && <Badge variant="outline" className="text-xs px-1 py-0">Selected</Badge>}
+                                {!critere.suggestions.find(s => s.isSelectedByUser) && critere.suggestions.find(s => s.isBestMatch) && <Badge variant="default" className="text-xs px-1 py-0">Best</Badge>}
+                                <span className="text-xs">▼</span>
+                              </div>
+                            </div>
+                            {critere.suggestions.length > 1 && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {critere.suggestions.length} suggestions disponibles
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Dropdown avec toutes les suggestions */}
+                          {openDropdowns[critere.id] && (
+                            <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                              {critere.suggestions.map((suggestion, index) => {
+                                // Détermination de la pertinence basée sur le score
+                                const isHighQuality = suggestion.similarityScore >= 60
+                                const isMediumQuality = suggestion.similarityScore >= 30
+                                const isLowQuality = suggestion.similarityScore < 30
+                                
+                                return (
+                                  <div
+                                    key={suggestion.id}
+                                    className={`p-3 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer ${
+                                      suggestion.isSelectedByUser ? 'bg-blue-50' : suggestion.isBestMatch ? 'bg-green-50' : ''
+                                    } ${isLowQuality ? 'opacity-60' : ''}`}
+                                    onClick={() => {
+                                      handleSelectSuggestion(critere.id, suggestion.id)
+                                      toggleDropdown(critere.id)
+                                    }}
+                                  >
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <div className="font-medium text-sm truncate">{suggestion.label}</div>
+                                          {/* Indicateur de qualité */}
+                                          {isHighQuality && <div className="w-2 h-2 bg-green-500 rounded-full" title="Haute qualité"></div>}
+                                          {isMediumQuality && !isHighQuality && <div className="w-2 h-2 bg-yellow-500 rounded-full" title="Qualité moyenne"></div>}
+                                          {isLowQuality && <div className="w-2 h-2 bg-red-500 rounded-full" title="Faible qualité - Non pertinente"></div>}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground mt-1">
+                                          Score: {suggestion.similarityScore}% • 
+                                          Audience: {formatAudience(suggestion.audience)} • 
+                                          Type: interest
+                                          {isLowQuality && <span className="text-red-600 font-medium"> • NON PERTINENTE</span>}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-1 ml-2">
+                                        {suggestion.isSelectedByUser && <Badge variant="outline" className="text-xs px-1 py-0">Selected</Badge>}
+                                        {suggestion.isBestMatch && <Badge variant="default" className="text-xs px-1 py-0">Best</Badge>}
+                                        {isLowQuality && <Badge variant="destructive" className="text-xs px-1 py-0">Low</Badge>}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
                         </div>
                       ) : (
-                        <span className="text-muted-foreground">No suggestion</span>
+                        <span className="text-muted-foreground text-sm">Aucune suggestion</span>
                       )}
                     </td>
+
+                    {/* Colonne Score */}
                     <td className="px-2 py-2">
-                      <Button size="sm" variant="outline">Edit</Button>
-                      <Button size="sm" variant="destructive" className="ml-2">Delete</Button>
+                      {critere.suggestions && critere.suggestions.length > 0 ? (
+                        <div className="flex items-center gap-2">
+                          <div className="font-mono text-sm">
+                            {(critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0])?.similarityScore}%
+                          </div>
+                          {/* Indicateur visuel de qualité dans la colonne score */}
+                          {(() => {
+                            const currentSuggestion = critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0]
+                            if (!currentSuggestion) return null
+                            
+                            const score = currentSuggestion.similarityScore
+                            if (score >= 60) return <div className="w-2 h-2 bg-green-500 rounded-full" title="Haute qualité"></div>
+                            if (score >= 30) return <div className="w-2 h-2 bg-yellow-500 rounded-full" title="Qualité moyenne"></div>
+                            return <div className="w-2 h-2 bg-red-500 rounded-full" title="Faible qualité"></div>
+                          })()}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
+
+                    {/* Colonne Audience */}
+                    <td className="px-2 py-2">
+                      {critere.suggestions && critere.suggestions.length > 0 ? (
+                        <div className="font-mono text-sm">
+                          {formatAudience((critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0])?.audience || 0)}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
+
+                    <td className="px-2 py-2">
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          disabled={loadingFacebook[critere.id]}
+                          onClick={() => handleGetFacebookSuggestions(critere)}
+                        >
+                          {loadingFacebook[critere.id] ? 'Chargement...' : 'Get Facebook'}
+                        </Button>
+                        <Button size="sm" variant="outline">Edit</Button>
+                        <Button size="sm" variant="destructive">Delete</Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={6} className="text-center py-4 text-muted-foreground">No criteria found.</td></tr>
+                  <tr><td colSpan={8} className="text-center py-4 text-muted-foreground">No criteria found.</td></tr>
                 )}
               </tbody>
             </table>

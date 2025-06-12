@@ -15,9 +15,15 @@ export default async function AdminPage() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="rounded-lg border bg-card text-card-foreground shadow-sm flex flex-col p-6">
-          <h2 className="text-lg font-semibold mb-2">Prompt principal</h2>
+          <h2 className="text-lg font-semibold mb-2">🎯 Prompt principal</h2>
           <p className="mb-4 text-sm text-muted-foreground">Gérez le prompt principal utilisé pour la génération de critères marketing.</p>
           <Link href="/admin/prompts" className="inline-block px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition">Éditer le prompt</Link>
+        </div>
+        
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm flex flex-col p-6">
+          <h2 className="text-lg font-semibold mb-2">🔍 Logs OpenAI</h2>
+          <p className="mb-4 text-sm text-muted-foreground">Consultez les requêtes et réponses d'enrichissement OpenAI pour optimiser vos prompts.</p>
+          <Link href="/admin/logs" className="inline-block px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition">Voir les logs</Link>
         </div>
       </div>
     </div>

@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { signIn, getSession } from "next-auth/react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from 'sonner'
+import { useToast } from '@/hooks/useToast'
 
 interface UserWithRole {
   name?: string | null
@@ -20,56 +20,80 @@ export default function LoginPage() {
   const router = useRouter();
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm();
   const [error, setError] = useState("");
+  const { success, error: showError } = useToast()
 
   const onSubmit = async (data: any) => {
     setError("");
-    const res = await signIn("credentials", {
-      redirect: false,
-      email: data.email,
-      password: data.password,
-    });
-    if (res?.error) {
-      setError("Email or password invalid");
-      toast.error("Email ou mot de passe invalide");
-    } else {
-      toast.success("Connexion réussie !");
-      let tries = 0;
-      let session: { user?: UserWithRole } | null = null;
-      while (tries < 10) {
-        session = await getSession();
-        if (session?.user?.role) break;
-        await new Promise(r => setTimeout(r, 150));
-        tries++;
+    try {
+      const res = await signIn("credentials", {
+        redirect: false,
+        email: data.email,
+        password: data.password,
+      });
+      
+      if (res?.error) {
+        setError("Email or password invalid");
+        showError("Email ou mot de passe invalide", { duration: 5000 });
+      } else {
+        success("Connexion réussie ! Redirection en cours...", { duration: 3000 });
+        
+        let tries = 0;
+        let session: { user?: UserWithRole } | null = null;
+        while (tries < 10) {
+          session = await getSession();
+          if (session?.user?.role) break;
+          await new Promise(r => setTimeout(r, 150));
+          tries++;
+        }
+        router.push("/dashboard");
       }
-      router.push("/dashboard");
+    } catch (err: any) {
+      setError("Une erreur inattendue s'est produite");
+      showError("Une erreur inattendue s'est produite lors de la connexion", { duration: 5000 });
     }
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-neutral-100 dark:bg-neutral-950">
-      <Card className="w-full max-w-sm border border-neutral-200 dark:border-neutral-800 shadow-none bg-white dark:bg-neutral-900">
+    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-xl font-semibold text-neutral-900 dark:text-neutral-100 text-center">Sign in</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">Connexion</CardTitle>
         </CardHeader>
         <CardContent>
-          <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
-            <div className="space-y-1">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div>
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" autoComplete="email" {...register("email", { required: true })} />
-              {errors.email && <span className="text-xs text-red-500">Email is required</span>}
+              <Input
+                id="email"
+                type="email"
+                {...register("email", { required: "Email requis" })}
+                className="mt-1"
+              />
+              {errors.email && (
+                <p className="text-red-500 text-sm mt-1">{errors.email.message as string}</p>
+              )}
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" autoComplete="current-password" {...register("password", { required: true })} />
-              {errors.password && <span className="text-xs text-red-500">Password is required</span>}
+            <div>
+              <Label htmlFor="password">Mot de passe</Label>
+              <Input
+                id="password"
+                type="password"
+                {...register("password", { required: "Mot de passe requis" })}
+                className="mt-1"
+              />
+              {errors.password && (
+                <p className="text-red-500 text-sm mt-1">{errors.password.message as string}</p>
+              )}
             </div>
-            {error && <div className="text-sm text-red-600 text-center">{error}</div>}
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Signing in..." : "Sign in"}
+            {error && (
+              <div className="text-red-500 text-sm text-center">{error}</div>
+            )}
+            <Button type="submit" disabled={isSubmitting} className="w-full">
+              {isSubmitting ? "Connexion..." : "Se connecter"}
             </Button>
           </form>
         </CardContent>
       </Card>
-    </main>
+    </div>
   );
 } 

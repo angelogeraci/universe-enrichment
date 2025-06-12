@@ -11,7 +11,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const body = await req.json()
     console.log('📥 DONNÉES REÇUES:', body)
     
-    const { label, template, description, searchType, isActive } = body
+    const { label, template, description, searchType, model, isActive } = body
     
     // Validation des données requises
     if (!label || !template) {
@@ -29,6 +29,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         template,
         description: description || null,
         searchType: searchType || null,
+        model: model || 'gpt-4o',
         isActive: isActive !== undefined ? isActive : true
       }
     })
@@ -67,6 +68,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         template: true,
         description: true,
         searchType: true,
+        model: true,
         isActive: true,
         createdAt: true,
         updatedAt: true

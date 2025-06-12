@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useSession, signOut } from 'next-auth/react'
-import { Home, Folder, Database, BarChart, User, Shield, LogOut, LogIn, Book } from 'lucide-react'
+import { Home, Folder, Database, BarChart, User, Shield, LogOut, LogIn, Book, Settings, MessageSquare, FileSearch2 } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -24,6 +24,7 @@ export function AppSidebar() {
   const { data: session } = useSession()
   const isAuthenticated = !!session?.user
   const user = session?.user as UserWithRole | undefined
+  const isAdmin = isAuthenticated && user?.role === 'admin'
 
   const handleSignOut = () => signOut({ callbackUrl: '/login' })
 
@@ -80,50 +81,83 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
             )}
-            {/* Lien Admin visible uniquement pour les admins */}
-            {isAuthenticated && user?.role === 'admin' && (
+          </SidebarMenu>
+        </nav>
+
+        {/* Section Admin - Visible uniquement pour les admins */}
+        {isAdmin && (
+          <>
+            <div className="mt-6 mb-1 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Admin</div>
+            <SidebarMenu className="bg-muted">
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-                  <Link href="/admin" data-cy="nav-admin">
-                    <Shield className="mr-3 h-5 w-5" /> Admin
+                <SidebarMenuButton asChild isActive={false} className="text-gray-700 text-base hover:bg-gray-200 hover:text-black focus:bg-gray-300 focus:text-black">
+                  <Link href="/admin/prompts" data-cy="sidebar-admin-prompts">
+                    <MessageSquare className="mr-3 h-5 w-5" /> Prompts
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-            )}
-          </SidebarMenu>
-        </nav>
-        {/* Groupe Documents */}
-        <div className="mt-6 mb-1 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Documents</div>
-        <SidebarMenu className="bg-muted">
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={false} className="text-gray-700 text-base hover:bg-gray-200 hover:text-black focus:bg-gray-300 focus:text-black">
-              <Link href="#">
-                <Database className="mr-3 h-5 w-5" /> Data Library
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={false} className="text-gray-700 text-base hover:bg-gray-200 hover:text-black focus:bg-gray-300 focus:text-black">
-              <Link href="#">
-                <Book className="mr-3 h-5 w-5" /> Reports
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={false} className="text-gray-700 text-base hover:bg-gray-200 hover:text-black focus:bg-gray-300 focus:text-black">
-              <Link href="#">
-                <LogIn className="mr-3 h-5 w-5" /> Word Assistant
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={false} className="text-gray-700 text-base hover:bg-gray-200 hover:text-black focus:bg-gray-300 focus:text-black">
-              <Link href="#">
-                <span className="mr-3 h-5 w-5">...</span> More
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={false} className="text-gray-700 text-base hover:bg-gray-200 hover:text-black focus:bg-gray-300 focus:text-black">
+                  <Link href="/admin/logs" data-cy="sidebar-admin-logs">
+                    <FileSearch2 className="mr-3 h-5 w-5" /> Logs
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={false} className="text-gray-700 text-base hover:bg-gray-200 hover:text-black focus:bg-gray-300 focus:text-black">
+                  <Link href="/admin" data-cy="sidebar-admin-dashboard">
+                    <Settings className="mr-3 h-5 w-5" /> Configuration
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={false} className="text-gray-700 text-base hover:bg-gray-200 hover:text-black focus:bg-gray-300 focus:text-black">
+                  <Link href="/admin/users" data-cy="sidebar-admin-users">
+                    <User className="mr-3 h-5 w-5" /> Utilisateurs
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </>
+        )}
+
+        {/* Section Documents - Visible pour tous (si besoin) */}
+        {!isAdmin && (
+          <>
+            <div className="mt-6 mb-1 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Documents</div>
+            <SidebarMenu className="bg-muted">
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={false} className="text-gray-700 text-base hover:bg-gray-200 hover:text-black focus:bg-gray-300 focus:text-black">
+                  <Link href="#" data-cy="sidebar-data-library">
+                    <Database className="mr-3 h-5 w-5" /> Data Library
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={false} className="text-gray-700 text-base hover:bg-gray-200 hover:text-black focus:bg-gray-300 focus:text-black">
+                  <Link href="#" data-cy="sidebar-reports">
+                    <Book className="mr-3 h-5 w-5" /> Reports
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={false} className="text-gray-700 text-base hover:bg-gray-200 hover:text-black focus:bg-gray-300 focus:text-black">
+                  <Link href="#" data-cy="sidebar-word-assistant">
+                    <LogIn className="mr-3 h-5 w-5" /> Word Assistant
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={false} className="text-gray-700 text-base hover:bg-gray-200 hover:text-black focus:bg-gray-300 focus:text-black">
+                  <Link href="#" data-cy="sidebar-more">
+                    <span className="mr-3 h-5 w-5">...</span> More
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </>
+        )}
+
         {/* Déconnexion en bas */}
         <div className="flex-1" />
         <div className="mt-6 px-3">

@@ -9,6 +9,7 @@ import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useRouter } from 'next/navigation'
+import { useToast } from '@/hooks/useToast'
 
 const schema = z.object({
   name: z.string().min(2, "Le nom du projet est requis"),
@@ -50,6 +51,7 @@ export default function CreateProjectModal({
   })
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const { success, error: showError } = useToast()
 
   // Pré-remplir les champs lors de l'édition
   useEffect(() => {
@@ -72,9 +74,13 @@ export default function CreateProjectModal({
         
         if (!response.ok) {
           const errorData = await response.json()
-          throw new Error(errorData.error || 'Erreur lors de la modification')
+          const errorMessage = errorData.error || 'Erreur lors de la modification'
+          setError(errorMessage)
+          showError(errorMessage, { duration: 5000 })
+          return
         }
         
+        success('Projet modifié avec succès !', { duration: 3000 })
         setOpen(false)
         reset()
         if (onProjectCreated) onProjectCreated()
@@ -87,7 +93,9 @@ export default function CreateProjectModal({
         router.push('/projects/create')
       }
     } catch (e: any) {
-      setError(e.message || "Erreur inconnue")
+      const errorMessage = e.message || "Erreur inconnue"
+      setError(errorMessage)
+      showError(errorMessage, { duration: 5000 })
     }
   }
 

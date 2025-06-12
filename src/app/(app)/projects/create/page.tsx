@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { ArrowLeft } from "lucide-react"
+import { useToast } from '@/hooks/useToast'
 
 // Liste complète des pays du monde
 const countries = [
@@ -54,7 +55,7 @@ const countries = [
   { value: "CF", label: "🇨🇫 République centrafricaine" },
   { value: "CG", label: "🇨🇬 République du Congo" },
   { value: "CH", label: "🇨🇭 Suisse" },
-  { value: "CI", label: "🇨🇮 Côte d'Ivoire" },
+  { value: "CI", label: "🇨🇨 Côte d'Ivoire" },
   { value: "CK", label: "🇨🇰 Îles Cook" },
   { value: "CL", label: "🇨🇱 Chili" },
   { value: "CM", label: "🇨🇲 Cameroun" },
@@ -274,6 +275,7 @@ export default function CreateProjectPage() {
   const [categories, setCategories] = useState<CategoryOption[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const { success, error: showError, warning } = useToast()
 
   // Charger les données du projet depuis localStorage
   useEffect(() => {
@@ -284,14 +286,14 @@ export default function CreateProjectPage() {
         setProjectData(data)
       } catch (e) {
         console.error('Erreur lors du chargement des données du projet:', e)
-        // Si pas de données, rediriger vers la liste des projets
+        showError('Erreur lors du chargement des données du projet')
         router.push('/projects')
       }
     } else {
-      // Si pas de données, rediriger vers la liste des projets
+      warning('Aucune donnée de projet trouvée')
       router.push('/projects')
     }
-  }, [router])
+  }, [])
 
   // Charger les listes de catégories disponibles
   useEffect(() => {
@@ -305,9 +307,12 @@ export default function CreateProjectPage() {
             label: cat.name
           }))
           setCategories(categoryOptions)
+        } else {
+          throw new Error('Erreur lors du chargement des catégories')
         }
       } catch (error) {
         console.error('Erreur lors du chargement des catégories:', error)
+        showError('Impossible de charger les listes de catégories')
       }
     }
     fetchCategories()
@@ -317,6 +322,7 @@ export default function CreateProjectPage() {
     e.preventDefault()
     setError('')
     setIsSubmitting(true)
+    
     try {
       const res = await fetch('/api/projects', {
         method: 'POST',
@@ -329,15 +335,29 @@ export default function CreateProjectPage() {
           categoryListId: categoryList?.value
         })
       })
+      
       if (!res.ok) {
         const data = await res.json()
-        setError(data.error || 'Erreur lors de la création du projet')
+        const errorMessage = data.error || 'Erreur lors de la création du projet'
+        setError(errorMessage)
+        showError(errorMessage, { duration: 6000 })
         setIsSubmitting(false)
         return
       }
+      
+      // Succès
+      success('Projet créé avec succès ! Enrichissement en cours...', { duration: 4000 })
+      
+      // Nettoyer le localStorage
+      localStorage.removeItem('newProjectData')
+      
+      // Rediriger vers la liste des projets
       router.push('/projects')
-    } catch (err) {
-      setError('Erreur réseau ou serveur')
+      
+    } catch (err: any) {
+      const errorMessage = 'Erreur réseau ou serveur'
+      setError(errorMessage)
+      showError(errorMessage, { duration: 6000 })
       setIsSubmitting(false)
     }
   }

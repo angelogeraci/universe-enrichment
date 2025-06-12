@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
         template: true,
         description: true,
         searchType: true,
+        model: true,
         isActive: true,
         createdAt: true,
         updatedAt: true
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
     })
     
     console.log('📋 Prompts trouvés:', prompts.length)
-    console.log('📝 Détails prompts:', prompts.map(p => ({ id: p.id, label: p.label, searchType: p.searchType })))
+    console.log('📝 Détails prompts:', prompts.map(p => ({ id: p.id, label: p.label, searchType: p.searchType, model: p.model })))
     
     return NextResponse.json({ prompts })
   } catch (error) {
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
     }
     
     const body = await req.json()
-    const { label, template, description, searchType, isActive } = body
+    const { label, template, description, searchType, model, isActive } = body
     
     if (!label || !template) {
       return NextResponse.json({ error: 'Label et template requis' }, { status: 400 })
@@ -62,6 +63,7 @@ export async function POST(req: NextRequest) {
         template,
         description: description || null,
         searchType: searchType || null,
+        model: model || 'gpt-4o',
         isActive: isActive !== undefined ? isActive : true
       }
     })

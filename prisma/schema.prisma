@@ -76,6 +76,7 @@ model PromptTemplate {
   template    String
   description String?
   searchType  String?  // "origin" ou "presence" 
+  model       String?  @default("gpt-4o") // Modèle OpenAI à utiliser
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -108,4 +109,19 @@ model SuggestionFacebook {
   isSelectedByUser Boolean @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model EnrichmentLog {
+  id               String   @id @default(cuid())
+  projectId        String
+  projectName      String
+  category         String
+  country          String
+  searchType       String
+  model            String
+  promptSent       String   // Le prompt complet envoyé à OpenAI
+  responseRaw      String   // La réponse brute d'OpenAI
+  responseStatus   String   // "success" ou "error"
+  processingTime   Int      // Temps de traitement en ms
+  createdAt        DateTime @default(now())
 }

@@ -3,6 +3,8 @@ import React, { useEffect, useState, ChangeEvent, FormEvent } from 'react'
 import { Input } from './ui/input'
 import { Textarea } from './ui/textarea'
 import { Button } from './ui/button'
+import { useToast } from '@/hooks/useToast'
+import { OPENAI_MODELS, getModelsByCategory, type OpenAIModel } from '@/lib/openai-models'
 
 type Prompt = {
   id: string
@@ -10,26 +12,35 @@ type Prompt = {
   template: string
   description?: string
   searchType?: string
+  model?: string
   isActive: boolean
 }
 
-const OUTPUT_FORMAT_INSTRUCTION = `Vous devez répondre uniquement avec un tableau JSON de chaînes de caractères, sans texte explicatif, sans balises markdown, sans formatage supplémentaire.
-
+const OUTPUT_FORMAT_INSTRUCTION = `IMPORTANT - FORMAT DE RÉPONSE REQUIS:
+Vous devez répondre uniquement avec un tableau JSON de chaînes de caractères, sans texte explicatif, sans balises markdown, sans formatage supplémentaire.
 Format attendu : ["item1", "item2", "item3"]
-
 Règles strictes :
 - Réponse UNIQUEMENT en format JSON array
 - Chaque élément est une chaîne de caractères
 - Pas de texte avant ou après le JSON
 - Pas de balises \`\`\`json ou autres
-- Maximum 50 éléments par réponse`
+- Maximum 200 éléments par réponse`
 
 export default function PromptAdminEditor () {
   const [prompts, setPrompts] = useState<Prompt[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const { success, error: showError, info } = useToast()
+
+  // Organise les modèles par nouvelles catégories
+  const modelsByCategory = {
+    'GPT-4': OPENAI_MODELS.filter(m => m.category === 'GPT-4'),
+    'Reasoning': OPENAI_MODELS.filter(m => m.category === 'Reasoning'),
+    'GPT-3.5': OPENAI_MODELS.filter(m => m.category === 'GPT-3.5'),
+    // Garde compatibilité avec anciens modèles
+    'legacy': OPENAI_MODELS.filter(m => m.category === 'legacy'),
+    'standard': OPENAI_MODELS.filter(m => m.category === 'standard')
+  }
 
   useEffect(() => {
     fetchPrompts()
@@ -38,13 +49,17 @@ export default function PromptAdminEditor () {
   const fetchPrompts = async () => {
     try {
       const res = await fetch('/api/prompts')
+      if (!res.ok) {
+        throw new Error('Erreur lors du chargement des prompts')
+      }
       const data = await res.json()
       if (data.prompts) {
         setPrompts(data.prompts.filter((p: Prompt) => p.isActive && p.searchType))
+        info('Prompts chargés avec succès', { duration: 2000 })
       }
       setLoading(false)
-    } catch (error) {
-      setError('Erreur lors du chargement des prompts')
+    } catch (error: any) {
+      showError(error.message || 'Erreur lors du chargement des prompts', { duration: 5000 })
       setLoading(false)
     }
   }
@@ -59,10 +74,12 @@ export default function PromptAdminEditor () {
     )
   }
 
+  const handleModelChange = (promptId: string, event: ChangeEvent<HTMLSelectElement>) => {
+    handleChange(promptId, 'model', event.target.value)
+  }
+
   const handleSave = async (prompt: Prompt) => {
     setSaving(prompt.id)
-    setError('')
-    setSuccess('')
     
     try {
       const res = await fetch(`/api/prompts/${prompt.id}`, {
@@ -73,16 +90,19 @@ export default function PromptAdminEditor () {
           template: prompt.template,
           description: prompt.description,
           searchType: prompt.searchType,
+          model: prompt.model,
           isActive: true
         })
       })
       
-      if (!res.ok) throw new Error('Erreur lors de la sauvegarde')
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || 'Erreur lors de la sauvegarde')
+      }
       
-      setSuccess(`Prompt "${prompt.label}" sauvegardé`)
-      setTimeout(() => setSuccess(''), 3000)
+      success(`Prompt "${prompt.label}" sauvegardé avec succès !`, { duration: 4000 })
     } catch (e: any) {
-      setError(e.message || 'Erreur inconnue')
+      showError(e.message || 'Erreur lors de la sauvegarde du prompt', { duration: 5000 })
     } finally {
       setSaving(null)
     }
@@ -105,6 +125,11 @@ export default function PromptAdminEditor () {
       default: 
         return 'Type de recherche non défini'
     }
+  }
+
+  const getModelDescription = (modelId: string) => {
+    const model = OPENAI_MODELS.find(m => m.id === modelId)
+    return model ? model.description : 'Modèle inconnu'
   }
 
   if (loading) return <div>Chargement des prompts...</div>
@@ -135,6 +160,62 @@ export default function PromptAdminEditor () {
                 required 
               />
             </div>
+
+            <div>
+              <label className="block font-medium mb-1">Modèle OpenAI</label>
+              <select 
+                value={prompt.model || 'gpt-4o'} 
+                onChange={(e) => handleModelChange(prompt.id, e)}
+                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <optgroup label="🚀 GPT-4 (2025)">
+                  {modelsByCategory['GPT-4'].map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} {model.id === 'gpt-4o' ? '⭐ Recommandé' : ''}
+                    </option>
+                  ))}
+                </optgroup>
+                
+                <optgroup label="🧠 Modèles de Raisonnement">
+                  {modelsByCategory['Reasoning'].map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </optgroup>
+                
+                <optgroup label="⚡ GPT-3.5">
+                  {modelsByCategory['GPT-3.5'].map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </optgroup>
+                
+                {modelsByCategory['standard'] && modelsByCategory['standard'].length > 0 && (
+                  <optgroup label="🔧 Standards">
+                    {modelsByCategory['standard'].map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                
+                {modelsByCategory['legacy'] && modelsByCategory['legacy'].length > 0 && (
+                  <optgroup label="📜 Classiques">
+                    {modelsByCategory['legacy'].map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              <p className="text-xs text-gray-600 mt-1">
+                <strong>Sélectionné:</strong> {getModelDescription(prompt.model || 'gpt-4o')}
+              </p>
+            </div>
             
             <div>
               <label className="block font-medium mb-1">Template du Prompt</label>
@@ -144,10 +225,10 @@ export default function PromptAdminEditor () {
                 rows={12} 
                 required 
                 className="font-mono text-sm"
-                placeholder="Utilisez {{category}} et {{country}} comme variables"
+                placeholder="Utilisez {{category}}, {{categoryPath}} et {{country}} comme variables"
               />
               <p className="text-sm text-gray-600 mt-1">
-                Variables disponibles: <code>{'{{category}}'}</code>, <code>{'{{country}}'}</code>
+                Variables disponibles: <code>{'{{category}}'}</code>, <code>{'{{categoryPath}}'}</code>, <code>{'{{country}}'}</code>
               </p>
             </div>
 
@@ -194,10 +275,6 @@ export default function PromptAdminEditor () {
           </div>
         </div>
       </div>
-
-      {/* Messages de feedback */}
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">{error}</div>}
-      {success && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">{success}</div>}
     </div>
   )
 } 

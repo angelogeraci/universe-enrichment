@@ -4,9 +4,17 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import DeleteConfirmModal from '@/components/DeleteConfirmModal'
+import * as XLSX from 'xlsx'
 
 // TODO: Permettre de modifier le nom d'une liste de catégories (comme sur les projets)
 // TODO: Permettre d'éditer une catégorie (nom, path associé, critère AND)
+
+// Types pour l'upload
+interface UploadRow {
+  Path: string
+  Category: string
+  AND?: string
+}
 
 export default function CategoryListEditor({ slug }: { slug: string }) {
   const [name, setName] = useState('')
@@ -19,10 +27,16 @@ export default function CategoryListEditor({ slug }: { slug: string }) {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
+  // États pour l'upload
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<{ current: number, total: number } | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
   // Fetch categories
   const fetchCategories = () => {
     setLoading(true)
     setError(null)
+    setSuccessMessage(null)
     fetch(`/api/categories/slug/${slug}`)
       .then(res => res.json())
       .then(data => setCategories(data.categories || []))
@@ -33,6 +47,145 @@ export default function CategoryListEditor({ slug }: { slug: string }) {
   useEffect(() => {
     fetchCategories()
   }, [slug])
+
+  // Fonction pour parser le fichier Excel/CSV
+  const parseUploadFile = (file: File): Promise<UploadRow[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result
+          const workbook = XLSX.read(data, { type: 'binary' })
+          const sheetName = workbook.SheetNames[0]
+          const worksheet = workbook.Sheets[sheetName]
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
+          
+          if (jsonData.length < 2) {
+            throw new Error('Le fichier doit contenir au moins une ligne d\'en-tête et une ligne de données')
+          }
+
+          const headers = jsonData[0] as string[]
+          const rows = jsonData.slice(1) as any[][]
+
+          // Vérifier que les colonnes requises sont présentes
+          const pathIndex = headers.findIndex(h => h.toLowerCase().includes('path'))
+          const categoryIndex = headers.findIndex(h => h.toLowerCase().includes('category'))
+          const andIndex = headers.findIndex(h => h.toLowerCase().includes('and'))
+
+          if (pathIndex === -1 || categoryIndex === -1) {
+            throw new Error('Le fichier doit contenir les colonnes "Path" et "Category"')
+          }
+
+          const parsedRows: UploadRow[] = rows
+            .filter(row => row[pathIndex] && row[categoryIndex]) // Filtrer les lignes vides
+            .map(row => ({
+              Path: String(row[pathIndex]).trim(),
+              Category: String(row[categoryIndex]).trim(),
+              AND: andIndex !== -1 && row[andIndex] ? String(row[andIndex]).trim() : undefined
+            }))
+
+          resolve(parsedRows)
+        } catch (error: any) {
+          reject(new Error(`Erreur lors du parsing du fichier: ${error.message}`))
+        }
+      }
+      reader.onerror = () => reject(new Error('Erreur lors de la lecture du fichier'))
+      reader.readAsBinaryString(file)
+    })
+  }
+
+  // Fonction pour traiter l'upload de fichier
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Vérifier le type de fichier
+    const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+      'text/csv' // .csv
+    ]
+    
+    if (!allowedTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls|csv)$/i)) {
+      setError('Format de fichier non supporté. Utilisez .xlsx, .xls ou .csv')
+      return
+    }
+
+    setUploading(true)
+    setError(null)
+    setUploadProgress({ current: 0, total: 0 })
+
+    try {
+      // Parser le fichier
+      const rows = await parseUploadFile(file)
+      
+      if (rows.length === 0) {
+        throw new Error('Aucune donnée valide trouvée dans le fichier')
+      }
+
+      setUploadProgress({ current: 0, total: rows.length })
+
+      // Traiter les catégories une par une
+      let successCount = 0
+      let errorCount = 0
+      
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        setUploadProgress({ current: i + 1, total: rows.length })
+
+        try {
+          const andCriteriaArray = row.AND ? [row.AND] : []
+          
+          const response = await fetch(`/api/categories/slug/${slug}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ 
+              name: row.Category, 
+              paths: [row.Path], 
+              andCriteria: andCriteriaArray 
+            })
+          })
+
+          if (response.ok) {
+            successCount++
+          } else {
+            errorCount++
+            console.warn(`Erreur pour la ligne ${i + 1}:`, await response.text())
+          }
+        } catch (err) {
+          errorCount++
+          console.warn(`Erreur pour la ligne ${i + 1}:`, err)
+        }
+
+        // Petite pause pour éviter de surcharger l'API
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+
+      // Rafraîchir la liste des catégories
+      await fetchCategories()
+
+      // Message de succès
+      if (successCount > 0) {
+        setError(null)
+        if (errorCount > 0) {
+          setSuccessMessage(`Upload terminé : ${successCount} catégories créées avec succès, ${errorCount} erreurs`)
+        } else {
+          setSuccessMessage(`✅ Upload réussi : ${successCount} catégories créées avec succès !`)
+        }
+      } else {
+        setError('Aucune catégorie n\'a pu être créée')
+      }
+
+    } catch (error: any) {
+      setError(error.message || 'Erreur lors de l\'upload du fichier')
+    } finally {
+      setUploading(false)
+      setUploadProgress(null)
+      // Réinitialiser l'input file
+      event.target.value = ''
+    }
+  }
 
   // Handlers for dynamic fields
   const handlePathChange = (i: number, value: string) => {
@@ -52,6 +205,7 @@ export default function CategoryListEditor({ slug }: { slug: string }) {
     e.preventDefault()
     setAdding(true)
     setError(null)
+    setSuccessMessage(null)
     try {
       const res = await fetch(`/api/categories/slug/${slug}`, {
         method: 'POST',
@@ -63,6 +217,7 @@ export default function CategoryListEditor({ slug }: { slug: string }) {
       setName('')
       setPaths([''])
       setAndCriteria([])
+      setSuccessMessage('Catégorie ajoutée avec succès !')
       // Refresh categories
       await fetchCategories()
     } catch (e: any) {
@@ -143,6 +298,85 @@ export default function CategoryListEditor({ slug }: { slug: string }) {
 
   return (
     <div className="space-y-8">
+      {/* Section d'upload de fichier */}
+      <div className="border rounded-lg p-6 bg-muted/30">
+        <h3 className="text-lg font-semibold mb-4">📁 Import depuis un fichier</h3>
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm text-muted-foreground mb-3">
+              Importez vos catégories depuis un fichier Excel (.xlsx, .xls) ou CSV avec 3 colonnes :
+            </p>
+            <ul className="text-xs text-muted-foreground space-y-1 mb-4 ml-4">
+              <li><strong>Path</strong> : Chemin complet de la catégorie (ex: "Sports &gt; Football &gt; Équipes")</li>
+              <li><strong>Category</strong> : Nom de la catégorie (ex: "Équipes")</li>
+              <li><strong>AND</strong> : Critère Facebook optionnel (ex: "interests")</li>
+            </ul>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <Input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleFileUpload}
+              disabled={uploading}
+              className="flex-1"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={uploading}
+              onClick={() => {
+                // Télécharger un template d'exemple
+                const template = [
+                  ['Path', 'Category', 'AND'],
+                  ['Sports > Football', 'Football', 'interests'],
+                  ['Sports > Football > Équipes', 'Équipes', ''],
+                  ['Lifestyle > Mode', 'Mode', 'interests']
+                ]
+                const ws = XLSX.utils.aoa_to_sheet(template)
+                const wb = XLSX.utils.book_new()
+                XLSX.utils.book_append_sheet(wb, ws, 'Template')
+                XLSX.writeFile(wb, 'categories-template.xlsx')
+              }}
+            >
+              📥 Télécharger template
+            </Button>
+          </div>
+
+          {uploading && uploadProgress && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span>Import en cours...</span>
+                <span>{uploadProgress.current}/{uploadProgress.total}</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2">
+                <div 
+                  className="bg-primary h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="p-3 bg-green-50 text-green-700 rounded-md border border-green-200">
+              {successMessage}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Séparateur */}
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">Ou ajouter manuellement</span>
+        </div>
+      </div>
+
+      {/* Formulaire d'ajout manuel existant */}
       <form onSubmit={handleAdd} className="space-y-4">
         <div>
           <label className="block font-medium mb-1">Nom de la catégorie</label>
@@ -169,6 +403,11 @@ export default function CategoryListEditor({ slug }: { slug: string }) {
           <Button type="button" variant="outline" size="sm" onClick={addAnd}>Ajouter un critère</Button>
         </div>
         {error && <div className="text-red-500 text-xs mt-1">{error}</div>}
+        {successMessage && (
+          <div className="p-3 bg-green-50 text-green-700 rounded-md border border-green-200 text-sm">
+            {successMessage}
+          </div>
+        )}
         <Button type="submit" disabled={adding || !name || !paths.filter(Boolean).length}>
           {adding ? 'Ajout...' : 'Ajouter la catégorie'}
         </Button>
