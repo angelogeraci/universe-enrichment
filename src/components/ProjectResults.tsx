@@ -9,6 +9,8 @@ import { Checkbox } from './ui/checkbox'
 import { Badge } from './ui/badge'
 import { useToast } from '@/hooks/useToast'
 import * as XLSX from 'xlsx'
+import { RefreshCw, Edit, Trash2 } from 'lucide-react'
+import Select from 'react-select'
 
 export type Critere = {
   id: string
@@ -81,6 +83,20 @@ export function ProjectResults ({
   const [loadingFacebook, setLoadingFacebook] = useState<{ [key: string]: boolean }>({})
   const [openDropdowns, setOpenDropdowns] = useState<{ [key: string]: boolean }>({})
   const { success, error: showError } = useToast()
+  const [filterRelevant, setFilterRelevant] = useState(true)
+  const [filterNonRelevant, setFilterNonRelevant] = useState(true)
+
+  // Options du filtre pertinence
+  const relevanceOptions = [
+    { value: 'relevant', label: 'Pertinents' },
+    { value: 'nonrelevant', label: 'Non pertinents' },
+    { value: 'nosuggestion', label: 'Sans suggestion' },
+  ]
+  const [relevanceFilter, setRelevanceFilter] = useState([
+    relevanceOptions[0],
+    relevanceOptions[1],
+    relevanceOptions[2],
+  ])
 
   // Fonction pour sélectionner une suggestion spécifique
   const handleSelectSuggestion = async (critereId: string, suggestionId: string) => {
@@ -155,6 +171,20 @@ export function ProjectResults ({
   // Filtrage et tri
   const filtered = useMemo(() => {
     let data = criteriaData
+    // Filtrage par pertinence multi-select + sans suggestion
+    data = data.filter(critere => {
+      const hasSuggestions = critere.suggestions && critere.suggestions.length > 0
+      const mainSuggestion = hasSuggestions ? (critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0]) : null
+      const isRelevant = mainSuggestion && mainSuggestion.similarityScore >= 50
+      const showRelevant = relevanceFilter.some(opt => opt.value === 'relevant')
+      const showNonRelevant = relevanceFilter.some(opt => opt.value === 'nonrelevant')
+      const showNoSuggestion = relevanceFilter.some(opt => opt.value === 'nosuggestion')
+      if (showNoSuggestion && !hasSuggestions) return true
+      if (!hasSuggestions) return false
+      if (showRelevant && isRelevant) return true
+      if (showNonRelevant && !isRelevant) return true
+      return false
+    })
     if (search) {
       data = data.filter(c => c.label.toLowerCase().includes(search.toLowerCase()) || c.category.toLowerCase().includes(search.toLowerCase()))
     }
@@ -166,7 +196,7 @@ export function ProjectResults ({
       return 0
     })
     return data
-  }, [criteriaData, search, sortBy, sortDir])
+  }, [criteriaData, search, sortBy, sortDir, relevanceFilter])
 
   const toggleSelect = (id: string) => {
     setSelected(sel => sel.includes(id) ? sel.filter(s => s !== id) : [...sel, id])
@@ -252,6 +282,26 @@ export function ProjectResults ({
     return mainSuggestion && mainSuggestion.similarityScore >= 50
   }).length
 
+  // Suppression en masse des critères sélectionnés
+  const handleDeleteSelected = async () => {
+    if (selected.length === 0) return
+    if (!window.confirm(`Supprimer ${selected.length} critère(s) sélectionné(s) ? Cette action est irréversible.`)) return
+    try {
+      const results = await Promise.all(selected.map(id =>
+        fetch(`/api/criteres/${id}`, { method: 'DELETE' })
+      ))
+      const allOk = results.every(r => r.ok)
+      if (allOk) {
+        success(`${selected.length} critère(s) supprimé(s)`)
+      } else {
+        showError('Erreur lors de la suppression de certains critères')
+      }
+      window.location.reload()
+    } catch (e) {
+      showError('Erreur lors de la suppression')
+    }
+  }
+
   // Si onlyMetrics, afficher seulement les cards
   if (onlyMetrics) {
     return (
@@ -334,10 +384,28 @@ export function ProjectResults ({
                   onChange={e => setSearch(e.target.value)}
                   className="w-64"
                 />
-                <Button size="sm" variant="outline" onClick={selectAll}>Tout sélectionner</Button>
-                <Button size="sm" variant="outline" onClick={deselectAll}>Tout désélectionner</Button>
+                <div style={{ minWidth: 220 }}>
+                  <Select
+                    isMulti
+                    options={relevanceOptions}
+                    value={relevanceFilter}
+                    onChange={opts => setRelevanceFilter(opts as typeof relevanceOptions)}
+                    closeMenuOnSelect={false}
+                    hideSelectedOptions={false}
+                    placeholder="Filtrer..."
+                    classNamePrefix="relevance-select"
+                    styles={{
+                      control: base => ({ ...base, minHeight: 36, borderRadius: 6 }),
+                      menu: base => ({ ...base, zIndex: 50 }),
+                      multiValue: base => ({ ...base, background: '#e0e7ff', color: '#1e40af' }),
+                    }}
+                  />
+                </div>
                 <Button size="sm" variant="default" onClick={handleExportXLSX}>
                   Exporter en XLSX
+                </Button>
+                <Button size="sm" variant="destructive" onClick={handleDeleteSelected} disabled={selected.length === 0}>
+                  <Trash2 size={16} className="mr-2" /> Supprimer la sélection
                 </Button>
               </div>
               <div className="text-sm text-muted-foreground">
@@ -358,9 +426,6 @@ export function ProjectResults ({
                     <th className="px-2 py-3 text-left cursor-pointer hover:bg-muted/70" onClick={() => { setSortBy('category'); setSortDir(sortBy === 'category' && sortDir === 'asc' ? 'desc' : 'asc') }}>
                       Catégorie {sortBy === 'category' && (sortDir === 'asc' ? '↑' : '↓')}
                     </th>
-                    <th className="px-2 py-3 text-left cursor-pointer hover:bg-muted/70" onClick={() => { setSortBy('status'); setSortDir(sortBy === 'status' && sortDir === 'asc' ? 'desc' : 'asc') }}>
-                      Status {sortBy === 'status' && (sortDir === 'asc' ? '↑' : '↓')}
-                    </th>
                     <th className="px-2 py-3 text-left">Suggestion Facebook</th>
                     <th className="px-2 py-3 text-left">Score</th>
                     <th className="px-2 py-3 text-left">Audience</th>
@@ -370,13 +435,13 @@ export function ProjectResults ({
 
                 <tbody>
                   {filtered.map(critere => (
-                    <tr key={critere.id} className={selected.includes(critere.id) ? 'bg-blue-50' : ''}>
+                    <tr key={critere.id} className={`${selected.includes(critere.id) ? 'bg-blue-50' : ''} ${(() => {
+                      const mainSuggestion = critere.suggestions?.find(s => s.isSelectedByUser) || critere.suggestions?.find(s => s.isBestMatch) || critere.suggestions?.[0]
+                      return mainSuggestion && mainSuggestion.similarityScore < 50 ? 'opacity-60 pointer-events-auto cursor-not-allowed' : ''
+                    })()}`}>
                       <td className="px-2 py-2"><Checkbox checked={selected.includes(critere.id)} onCheckedChange={() => toggleSelect(critere.id)} /></td>
                       <td className="px-2 py-2 font-medium">{critere.label}</td>
                       <td className="px-2 py-2">{critere.category}</td>
-                      <td className="px-2 py-2">
-                        <Badge variant={critere.status === 'valid' ? 'default' : critere.status === 'pending' ? 'secondary' : 'secondary'}>{critere.status}</Badge>
-                      </td>
                       
                       {/* Colonne Suggestion Facebook avec dropdown */}
                       <td className="px-2 py-2">
@@ -488,15 +553,11 @@ export function ProjectResults ({
                             <div className="font-mono text-sm">
                               {(critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0])?.similarityScore}%
                             </div>
-                            {/* Indicateur visuel de qualité dans la colonne score */}
                             {(() => {
                               const currentSuggestion = critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0]
                               if (!currentSuggestion) return null
-                              
                               const score = currentSuggestion.similarityScore
-                              if (score >= 60) return <div className="w-2 h-2 bg-green-500 rounded-full" title="Haute qualité"></div>
-                              if (score >= 30) return <div className="w-2 h-2 bg-yellow-500 rounded-full" title="Qualité moyenne"></div>
-                              return <div className="w-2 h-2 bg-red-500 rounded-full" title="Faible qualité"></div>
+                              return <div className={`w-2 h-2 rounded-full ${score >= 50 ? 'bg-green-500' : 'bg-red-500'}`} title={score >= 50 ? 'Pertinent' : 'Non pertinent'}></div>
                             })()}
                           </div>
                         ) : (
@@ -518,15 +579,16 @@ export function ProjectResults ({
                       <td className="px-2 py-2">
                         <div className="flex gap-2">
                           <Button 
-                            size="sm" 
+                            size="icon" 
                             variant="outline"
                             disabled={loadingFacebook[critere.id]}
                             onClick={() => handleGetFacebookSuggestions(critere)}
+                            title="Rafraîchir les suggestions Facebook"
                           >
-                            {loadingFacebook[critere.id] ? 'Chargement...' : 'Get Facebook'}
+                            <RefreshCw className={loadingFacebook[critere.id] ? 'animate-spin' : ''} size={18} />
                           </Button>
-                          <Button size="sm" variant="outline">Edit</Button>
-                          <Button size="sm" variant="destructive">Delete</Button>
+                          <Button size="icon" variant="outline" title="Éditer"><Edit size={18} /></Button>
+                          <Button size="icon" variant="destructive" title="Supprimer"><Trash2 size={18} /></Button>
                         </div>
                       </td>
                     </tr>
@@ -620,10 +682,28 @@ export function ProjectResults ({
                 onChange={e => setSearch(e.target.value)}
                 className="w-64"
               />
-              <Button size="sm" variant="outline" onClick={selectAll}>Tout sélectionner</Button>
-              <Button size="sm" variant="outline" onClick={deselectAll}>Tout désélectionner</Button>
+              <div style={{ minWidth: 220 }}>
+                <Select
+                  isMulti
+                  options={relevanceOptions}
+                  value={relevanceFilter}
+                  onChange={opts => setRelevanceFilter(opts as typeof relevanceOptions)}
+                  closeMenuOnSelect={false}
+                  hideSelectedOptions={false}
+                  placeholder="Filtrer..."
+                  classNamePrefix="relevance-select"
+                  styles={{
+                    control: base => ({ ...base, minHeight: 36, borderRadius: 6 }),
+                    menu: base => ({ ...base, zIndex: 50 }),
+                    multiValue: base => ({ ...base, background: '#e0e7ff', color: '#1e40af' }),
+                  }}
+                />
+              </div>
               <Button size="sm" variant="default" onClick={handleExportXLSX}>
                 Exporter en XLSX
+              </Button>
+              <Button size="sm" variant="destructive" onClick={handleDeleteSelected} disabled={selected.length === 0}>
+                <Trash2 size={16} className="mr-2" /> Supprimer la sélection
               </Button>
             </div>
             <div className="text-sm text-muted-foreground">
@@ -644,9 +724,6 @@ export function ProjectResults ({
                   <th className="px-2 py-3 text-left cursor-pointer hover:bg-muted/70" onClick={() => { setSortBy('category'); setSortDir(sortBy === 'category' && sortDir === 'asc' ? 'desc' : 'asc') }}>
                     Catégorie {sortBy === 'category' && (sortDir === 'asc' ? '↑' : '↓')}
                   </th>
-                  <th className="px-2 py-3 text-left cursor-pointer hover:bg-muted/70" onClick={() => { setSortBy('status'); setSortDir(sortBy === 'status' && sortDir === 'asc' ? 'desc' : 'asc') }}>
-                    Status {sortBy === 'status' && (sortDir === 'asc' ? '↑' : '↓')}
-                  </th>
                   <th className="px-2 py-3 text-left">Suggestion Facebook</th>
                   <th className="px-2 py-3 text-left">Score</th>
                   <th className="px-2 py-3 text-left">Audience</th>
@@ -656,13 +733,13 @@ export function ProjectResults ({
 
               <tbody>
                 {filtered.map(critere => (
-                  <tr key={critere.id} className={selected.includes(critere.id) ? 'bg-blue-50' : ''}>
+                  <tr key={critere.id} className={`${selected.includes(critere.id) ? 'bg-blue-50' : ''} ${(() => {
+                    const mainSuggestion = critere.suggestions?.find(s => s.isSelectedByUser) || critere.suggestions?.find(s => s.isBestMatch) || critere.suggestions?.[0]
+                    return mainSuggestion && mainSuggestion.similarityScore < 50 ? 'opacity-60 pointer-events-auto cursor-not-allowed' : ''
+                  })()}`}>
                     <td className="px-2 py-2"><Checkbox checked={selected.includes(critere.id)} onCheckedChange={() => toggleSelect(critere.id)} /></td>
                     <td className="px-2 py-2 font-medium">{critere.label}</td>
                     <td className="px-2 py-2">{critere.category}</td>
-                    <td className="px-2 py-2">
-                      <Badge variant={critere.status === 'valid' ? 'default' : critere.status === 'pending' ? 'secondary' : 'secondary'}>{critere.status}</Badge>
-                    </td>
                     
                     {/* Colonne Suggestion Facebook avec dropdown */}
                     <td className="px-2 py-2">
@@ -774,15 +851,11 @@ export function ProjectResults ({
                           <div className="font-mono text-sm">
                             {(critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0])?.similarityScore}%
                           </div>
-                          {/* Indicateur visuel de qualité dans la colonne score */}
                           {(() => {
                             const currentSuggestion = critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0]
                             if (!currentSuggestion) return null
-                            
                             const score = currentSuggestion.similarityScore
-                            if (score >= 60) return <div className="w-2 h-2 bg-green-500 rounded-full" title="Haute qualité"></div>
-                            if (score >= 30) return <div className="w-2 h-2 bg-yellow-500 rounded-full" title="Qualité moyenne"></div>
-                            return <div className="w-2 h-2 bg-red-500 rounded-full" title="Faible qualité"></div>
+                            return <div className={`w-2 h-2 rounded-full ${score >= 50 ? 'bg-green-500' : 'bg-red-500'}`} title={score >= 50 ? 'Pertinent' : 'Non pertinent'}></div>
                           })()}
                         </div>
                       ) : (
@@ -804,15 +877,16 @@ export function ProjectResults ({
                     <td className="px-2 py-2">
                       <div className="flex gap-2">
                         <Button 
-                          size="sm" 
+                          size="icon" 
                           variant="outline"
                           disabled={loadingFacebook[critere.id]}
                           onClick={() => handleGetFacebookSuggestions(critere)}
+                          title="Rafraîchir les suggestions Facebook"
                         >
-                          {loadingFacebook[critere.id] ? 'Chargement...' : 'Get Facebook'}
+                          <RefreshCw className={loadingFacebook[critere.id] ? 'animate-spin' : ''} size={18} />
                         </Button>
-                        <Button size="sm" variant="outline">Edit</Button>
-                        <Button size="sm" variant="destructive">Delete</Button>
+                        <Button size="icon" variant="outline" title="Éditer"><Edit size={18} /></Button>
+                        <Button size="icon" variant="destructive" title="Supprimer"><Trash2 size={18} /></Button>
                       </div>
                     </td>
                   </tr>
