@@ -21,6 +21,14 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     if (!project || project.ownerId !== session.user.id) {
       return NextResponse.json({ error: 'Projet introuvable ou non autorisé' }, { status: 404 })
     }
+    // Supprimer d'abord toutes les suggestions Facebook liées aux critères du projet
+    const criteres = await prisma.critere.findMany({ where: { projectId: id }, select: { id: true } })
+    const critereIds = criteres.map(c => c.id)
+    if (critereIds.length > 0) {
+      await prisma.suggestionFacebook.deleteMany({ where: { critereId: { in: critereIds } } })
+      await prisma.critere.deleteMany({ where: { id: { in: critereIds } } })
+    }
+    // Supprimer le projet
     await prisma.project.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
