@@ -270,7 +270,7 @@ export default function CreateProjectPage() {
   const router = useRouter()
   const [projectData, setProjectData] = useState<{ name: string; description: string } | null>(null)
   const [country, setCountry] = useState<SingleValue<CountryOption>>(null)
-  const [searchType, setSearchType] = useState<"origin" | "origin_and_present">("origin")
+  const [searchType, setSearchType] = useState<"origin" | "presence">("origin")
   const [categoryList, setCategoryList] = useState<SingleValue<CategoryOption>>(null)
   const [categories, setCategories] = useState<CategoryOption[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -432,9 +432,9 @@ export default function CreateProjectPage() {
                 <div className="flex items-center space-x-3">
                   <Switch
                     id="search-type"
-                    checked={searchType === "origin_and_present"}
+                    checked={searchType === "presence"}
                     onCheckedChange={(checked) => 
-                      setSearchType(checked ? "origin_and_present" : "origin")
+                      setSearchType(checked ? "presence" : "origin")
                     }
                   />
                   <div className="flex-1">
