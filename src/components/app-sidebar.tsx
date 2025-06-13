@@ -29,8 +29,8 @@ export function AppSidebar() {
   const handleSignOut = () => signOut({ callbackUrl: '/login' })
 
   return (
-    <Sidebar className="bg-muted shadow-md w-64 min-h-screen flex-shrink-0 flex-grow-0 p-6">
-      <SidebarContent className="bg-muted">
+    <Sidebar className="fixed top-0 left-0 h-screen z-30 border-r bg-sidebar text-sidebar-foreground">
+      <SidebarContent className="flex flex-col h-full px-6 py-6">
         {/* Header avec logo et nom */}
         <div className="flex items-center gap-3 px-2 pt-0 pb-2">
           <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-lg font-bold text-primary border border-gray-200">A</div>
@@ -105,8 +105,8 @@ export function AppSidebar() {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={false} className="text-gray-700 text-base hover:bg-gray-200 hover:text-black focus:bg-gray-300 focus:text-black">
-                  <Link href="/admin" data-cy="sidebar-admin-dashboard">
-                    <Settings className="mr-3 h-5 w-5" /> Configuration
+                  <Link href="/admin/settings" data-cy="sidebar-admin-settings">
+                    <Settings className="mr-3 h-5 w-5" /> Settings
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -160,7 +160,7 @@ export function AppSidebar() {
 
         {/* Déconnexion en bas */}
         <div className="flex-1" />
-        <div className="mt-6 px-3">
+        <div className="mt-2 px-3">
           {isAuthenticated ? (
             <button onClick={handleSignOut} className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black transition-colors text-base" data-cy="sidebar-logout">
               <LogOut className="mr-2 h-5 w-5" /> Déconnexion

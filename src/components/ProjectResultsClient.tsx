@@ -1,9 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
-import useSWR from 'swr'
+import useSWR, { mutate as globalMutate } from 'swr'
 import ProjectResults, { Critere } from './ProjectResults'
 
-type EnrichmentStatus = 'pending' | 'processing' | 'done' | 'error'
+type EnrichmentStatus = 'pending' | 'processing' | 'paused' | 'cancelled' | 'done' | 'error'
 
 interface ProgressData {
   enrichmentStatus: EnrichmentStatus
@@ -14,6 +14,8 @@ interface ProgressData {
     percentage: number
     errors: number
     eta: string
+    isPausedFacebook?: boolean
+    currentCategoryIndex?: number
   }
   metrics: {
     aiCriteria: number
@@ -27,6 +29,7 @@ interface ProgressData {
     facebookSuggestionsObtained: number
     validCriteres: number
   }
+  pausedAt?: string
 }
 
 export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, totalCategories, onlyMetrics = false, onlyProgress = false, categoriesData = [] }: { 
@@ -38,6 +41,42 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
   categoriesData?: Array<{ name: string, path: string[], andCriteria?: string[] }>
 }) {
   const [currentStatus, setCurrentStatus] = useState<EnrichmentStatus>(initialStatus)
+  const [relevanceThreshold, setRelevanceThreshold] = useState<number>(70)
+
+  // Fonction pour contrôler le projet (pause/reprise/annulation)
+  const controlProject = async (action: 'pause' | 'resume' | 'cancel') => {
+    try {
+      const response = await fetch(`/api/projects/slug/${slug}/control`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      })
+      
+      if (response.ok) {
+        // Rafraîchir les données
+        globalMutate(`/api/projects/slug/${slug}/progress`)
+      } else {
+        const errorData = await response.json()
+        alert(`Erreur: ${errorData.error}`)
+      }
+    } catch (error) {
+      console.error('Erreur contrôle projet:', error)
+      alert('Erreur lors du contrôle du projet')
+    }
+  }
+
+  useEffect(() => {
+    fetch('/api/admin/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data.facebookRelevanceScoreThreshold) {
+          // Convertir le format décimal (0.7) en format pourcentage (70)
+          const threshold = Number(data.facebookRelevanceScoreThreshold)
+          setRelevanceThreshold(threshold <= 1 ? threshold * 100 : threshold)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   if (totalCategories === 0) {
     return <div className="py-12 text-center text-destructive">Aucune catégorie trouvée pour ce projet. Impossible de générer des critères IA.</div>
@@ -47,18 +86,19 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
   
   // Utiliser la nouvelle API de progression pour des informations détaillées
   const { data: progressData, error: progressError } = useSWR<ProgressData>(
-    currentStatus === 'processing' || currentStatus === 'pending' ? `/api/projects/slug/${slug}/progress` : null,
+    ['processing', 'pending', 'paused'].includes(currentStatus) ? `/api/projects/slug/${slug}/progress` : null,
     fetcher,
     {
       // Polling plus fréquent pendant le traitement pour un feedback en temps réel
-      refreshInterval: currentStatus === 'processing' ? 1000 : currentStatus === 'pending' ? 3000 : 0,
+      refreshInterval: currentStatus === 'processing' ? 1000 : ['pending', 'paused'].includes(currentStatus) ? 3000 : 0,
       revalidateOnFocus: false
     }
   )
 
   // Fetch des critères seulement si done ou si on veut les voir en temps réel pendant processing
-  const { data, error, isLoading } = useSWR<{ criteres: Critere[] }>(
-    currentStatus === 'done' || currentStatus === 'processing' ? `/api/projects/slug/${slug}/criteres` : null,
+  const criteresKey = (['done', 'processing', 'paused', 'cancelled'].includes(currentStatus)) ? `/api/projects/slug/${slug}/criteres` : null
+  const { data, error, isLoading, mutate: mutateCriteres } = useSWR<{ criteres: Critere[] }>(
+    criteresKey,
     fetcher,
     {
       // Polling moins fréquent pour les critères (ils changent moins souvent)
@@ -79,8 +119,10 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
   console.log('criteres.length', data?.criteres.length, 'progress.current', progressData?.progress.current, 'progress.total', progressData?.progress.total)
 
   // Alerte si incohérence entre la progression et les données reçues
-  if ((progressData?.progress.current > 0 || progressData?.progress.total > 0) && data?.criteres.length === 0 && (currentStatus === 'done' || currentStatus === 'processing')) {
-    return <div className="py-12 text-center text-destructive">Incohérence détectée : la progression indique {progressData?.progress.current}/{progressData?.progress.total} critères, mais aucune donnée n'a été reçue côté client.<br/>Vérifie la route API /api/projects/slug/{slug}/criteres et le mapping côté SWR.</div>
+  if ((progressData?.progress?.current && progressData.progress.current > 0) || (progressData?.progress?.total && progressData.progress.total > 0)) {
+    if ((!data || data.criteres.length === 0) && (['done', 'processing', 'paused'].includes(currentStatus))) {
+      return <div className="py-12 text-center text-destructive">Incohérence détectée : la progression indique {progressData?.progress?.current}/{progressData?.progress?.total} critères, mais aucune donnée n'a été reçue côté client.<br/>Vérifie la route API /api/projects/slug/{slug}/criteres et le mapping côté SWR.</div>
+    }
   }
 
   // Gestion d'erreur structurelle
@@ -104,7 +146,11 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
   const progress = progressData?.progress || {
     current: criteres.length,
     total: totalCategories,
-    step: currentStatus === 'done' ? 'Terminé' : currentStatus === 'processing' ? 'Traitement en cours...' : 'En attente...',
+    step: currentStatus === 'done' ? 'Terminé' : 
+           currentStatus === 'paused' ? 'Mis en pause' :
+           currentStatus === 'cancelled' ? 'Annulé' :
+           currentStatus === 'processing' ? 'Traitement en cours...' : 
+           currentStatus === 'error' ? 'Erreur' : 'En attente...',
     percentage: currentStatus === 'done' ? 100 : Math.round((criteres.length / totalCategories) * 100),
     errors: currentStatus === 'error' ? 1 : 0,
     eta: currentStatus === 'processing' ? 'Calcul en cours...' : '-'
@@ -112,13 +158,13 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
 
   // Mode onlyMetrics : retourner seulement les cards de métriques
   if (onlyMetrics) {
-    return <ProjectResults onlyMetrics metrics={metrics} categoriesData={categoriesData} criteriaData={criteres} />
+    return <ProjectResults onlyMetrics metrics={metrics} categoriesData={categoriesData} criteriaData={criteres} relevanceThreshold={relevanceThreshold} controlProject={controlProject} />
   }
 
   // Mode onlyProgress : retourner seulement la progression et tableau
   if (onlyProgress) {
-    if (currentStatus === 'processing' || currentStatus === 'pending') {
-      return <ProjectResults onlyProgress progress={progress} metrics={metrics} categoriesData={categoriesData} criteriaData={criteres} />
+    if (['processing', 'pending', 'paused'].includes(currentStatus)) {
+      return <ProjectResults onlyProgress progress={progress} metrics={metrics} categoriesData={categoriesData} criteriaData={criteres} relevanceThreshold={relevanceThreshold} controlProject={controlProject} />
     }
     if (currentStatus === 'done') {
       if (isLoading) {
@@ -130,16 +176,19 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
       if (criteres.length === 0) {
         return <div className="py-12 text-center text-destructive">Aucun critère généré par l'IA pour ce projet.</div>
       }
-      return <ProjectResults isComplete criteriaData={criteres} progress={progress} onlyProgress categoriesData={categoriesData} />
+      return <ProjectResults isComplete criteriaData={criteres} progress={progress} onlyProgress categoriesData={categoriesData} onMutate={mutateCriteres} relevanceThreshold={relevanceThreshold} controlProject={controlProject} />
+    }
+    if (currentStatus === 'cancelled') {
+      return <div className="py-12 text-center text-muted-foreground">Projet annulé. {criteres.length > 0 ? `${criteres.length} critères générés avant l'annulation.` : ''}</div>
     }
     // Fallback pour onlyProgress
-    return <ProjectResults onlyProgress progress={progress} categoriesData={categoriesData} criteriaData={criteres} />
+    return <ProjectResults onlyProgress progress={progress} categoriesData={categoriesData} criteriaData={criteres} onMutate={mutateCriteres} relevanceThreshold={relevanceThreshold} controlProject={controlProject} />
   }
 
   // Mode normal (complet)
-  if (currentStatus === 'processing' || currentStatus === 'pending') {
+  if (['processing', 'pending', 'paused'].includes(currentStatus)) {
     return (
-      <ProjectResults progress={progress} metrics={metrics} categoriesData={categoriesData} criteriaData={criteres} />
+      <ProjectResults progress={progress} metrics={metrics} categoriesData={categoriesData} criteriaData={criteres} onMutate={mutateCriteres} relevanceThreshold={relevanceThreshold} controlProject={controlProject} />
     )
   }
   if (currentStatus === 'done') {
@@ -153,13 +202,16 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
       return <div className="py-12 text-center text-destructive">Aucun critère généré par l'IA pour ce projet.</div>
     }
     return (
-      <ProjectResults isComplete criteriaData={criteres} metrics={metrics} progress={progress} categoriesData={categoriesData} />
+      <ProjectResults isComplete criteriaData={criteres} metrics={metrics} progress={progress} categoriesData={categoriesData} onMutate={mutateCriteres} relevanceThreshold={relevanceThreshold} controlProject={controlProject} />
     )
+  }
+  if (currentStatus === 'cancelled') {
+    return <div className="py-12 text-center text-muted-foreground">Projet annulé. {criteres.length > 0 ? `${criteres.length} critères générés avant l'annulation.` : ''}</div>
   }
   
   // Statut par défaut (fallback)
   return (
-    <ProjectResults progress={progress} metrics={metrics} categoriesData={categoriesData} criteriaData={criteres} />
+    <ProjectResults progress={progress} metrics={metrics} categoriesData={categoriesData} criteriaData={criteres} onMutate={mutateCriteres} relevanceThreshold={relevanceThreshold} controlProject={controlProject} />
   )
 }
 

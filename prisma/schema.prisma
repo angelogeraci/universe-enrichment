@@ -67,7 +67,9 @@ model Project {
   owner         User     @relation(fields: [ownerId], references: [id])
   ownerId       String
   criteres      Critere[]
-  enrichmentStatus String @default("pending")
+  enrichmentStatus String @default("pending") // "pending", "processing", "paused", "cancelled", "done", "error"
+  currentCategoryIndex Int? @default(0) // Index de la catégorie en cours de traitement
+  pausedAt      DateTime? // Date/heure de mise en pause
 }
 
 model PromptTemplate {
@@ -124,4 +126,10 @@ model EnrichmentLog {
   responseStatus   String   // "success" ou "error"
   processingTime   Int      // Temps de traitement en ms
   createdAt        DateTime @default(now())
+}
+
+model AppSetting {
+  key   String @id
+  value String
+  updatedAt DateTime @updatedAt
 }

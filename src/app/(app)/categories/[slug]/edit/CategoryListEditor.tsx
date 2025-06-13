@@ -5,6 +5,15 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import DeleteConfirmModal from '@/components/DeleteConfirmModal'
 import * as XLSX from 'xlsx'
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription
+} from '@/components/ui/dialog'
 
 // TODO: Permettre de modifier le nom d'une liste de catégories (comme sur les projets)
 // TODO: Permettre d'éditer une catégorie (nom, path associé, critère AND)
@@ -31,6 +40,14 @@ export default function CategoryListEditor({ slug }: { slug: string }) {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<{ current: number, total: number } | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [editingCategory, setEditingCategory] = useState<any | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editPaths, setEditPaths] = useState<string[]>([''])
+  const [editAndCriteria, setEditAndCriteria] = useState<string[]>([])
+  const [editLoading, setEditLoading] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
 
   // Fetch categories
   const fetchCategories = () => {
@@ -296,6 +313,74 @@ export default function CategoryListEditor({ slug }: { slug: string }) {
     }
   }
 
+  // Ouvre la modal d'édition et pré-remplit les champs
+  const openEditModal = (cat: any) => {
+    setEditingCategory(cat)
+    setEditName(cat.name || '')
+    let pathArray: string[] = []
+    if (Array.isArray(cat.path)) {
+      pathArray = cat.path
+    } else if (typeof cat.path === 'string') {
+      pathArray = cat.path.split(' -- ').map((s: string) => s.trim()).filter(Boolean)
+    } else {
+      pathArray = ['']
+    }
+    setEditPaths(pathArray.length ? pathArray : [''])
+    setEditAndCriteria(Array.isArray(cat.andCriteria) ? cat.andCriteria : cat.andCriteria ? [cat.andCriteria] : [])
+    setEditError(null)
+    setEditModalOpen(true)
+  }
+
+  // Ferme la modal et reset
+  const closeEditModal = () => {
+    setEditModalOpen(false)
+    setEditingCategory(null)
+    setEditName('')
+    setEditPaths([''])
+    setEditAndCriteria([])
+    setEditError(null)
+  }
+
+  // Handlers pour les champs dynamiques d'édition
+  const handleEditPathChange = (i: number, value: string) => {
+    setEditPaths(paths => paths.map((p, idx) => idx === i ? value : p))
+  }
+  const addEditPath = () => setEditPaths(paths => [...paths, ''])
+  const removeEditPath = (i: number) => setEditPaths(paths => paths.filter((_, idx) => idx !== i))
+  const handleEditAndChange = (i: number, value: string) => {
+    setEditAndCriteria(arr => arr.map((c, idx) => idx === i ? value : c))
+  }
+  const addEditAnd = () => setEditAndCriteria(arr => [...arr, ''])
+  const removeEditAnd = (i: number) => setEditAndCriteria(arr => arr.filter((_, idx) => idx !== i))
+
+  // Soumission de l'édition
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingCategory) return
+    setEditLoading(true)
+    setEditError(null)
+    try {
+      const res = await fetch(`/api/categories/slug/${slug}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          id: editingCategory.id,
+          name: editName,
+          paths: editPaths.filter(Boolean),
+          andCriteria: editAndCriteria.filter(Boolean)
+        })
+      })
+      if (!res.ok) throw new Error('Erreur lors de la mise à jour')
+      closeEditModal()
+      await fetchCategories()
+    } catch (e: any) {
+      setEditError(e.message || 'Erreur inconnue')
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-8">
       {/* Section d'upload de fichier */}
@@ -481,6 +566,14 @@ export default function CategoryListEditor({ slug }: { slug: string }) {
                           {deletingId === cat.id ? "Suppression..." : "Supprimer"}
                         </Button>
                       </DeleteConfirmModal>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ml-2"
+                        onClick={() => openEditModal(cat)}
+                      >
+                        Éditer
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -489,6 +582,49 @@ export default function CategoryListEditor({ slug }: { slug: string }) {
           </div>
         )}
       </div>
+
+      {/* Modal d'édition de catégorie */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Éditer la catégorie</DialogTitle>
+            <DialogDescription>Modifiez le nom, le path et les critères AND de la catégorie.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-4">
+            <div>
+              <label className="block font-medium mb-1">Nom de la catégorie</label>
+              <Input value={editName} onChange={e => setEditName(e.target.value)} required placeholder="Nom" />
+            </div>
+            <div>
+              <label className="block font-medium mb-1">Paths</label>
+              {editPaths.map((path, i) => (
+                <div key={i} className="flex gap-2 mb-2">
+                  <Input value={path} onChange={e => handleEditPathChange(i, e.target.value)} required placeholder={`Segment #${i+1}`} />
+                  {editPaths.length > 1 && <Button type="button" variant="destructive" size="icon" onClick={() => removeEditPath(i)}>-</Button>}
+                </div>
+              ))}
+              <Button type="button" variant="outline" size="sm" onClick={addEditPath}>Ajouter un segment</Button>
+            </div>
+            <div>
+              <label className="block font-medium mb-1">Critères AND (optionnel)</label>
+              {editAndCriteria.map((crit, i) => (
+                <div key={i} className="flex gap-2 mb-2">
+                  <Input value={crit} onChange={e => handleEditAndChange(i, e.target.value)} placeholder={`Critère #${i+1}`} />
+                  <Button type="button" variant="destructive" size="icon" onClick={() => removeEditAnd(i)}>-</Button>
+                </div>
+              ))}
+              <Button type="button" variant="outline" size="sm" onClick={addEditAnd}>Ajouter un critère</Button>
+            </div>
+            {editError && <div className="text-red-500 text-xs mt-1">{editError}</div>}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={closeEditModal} disabled={editLoading}>Annuler</Button>
+              <Button type="submit" disabled={editLoading || !editName || !editPaths.filter(Boolean).length}>
+                {editLoading ? 'Enregistrement...' : 'Enregistrer'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 } 

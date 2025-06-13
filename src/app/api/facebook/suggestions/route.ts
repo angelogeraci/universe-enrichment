@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
 
 // Initialisation de l'API Facebook
 const AccessToken = process.env.FACEBOOK_ACCESS_TOKEN
@@ -580,7 +580,8 @@ async function getFacebookInterestSuggestions(query: string, country: string, ca
 // POST endpoint pour récupérer les suggestions Facebook
 export async function POST(request: NextRequest) {
   try {
-    const { critereId, query, country, adAccountId } = await request.json()
+    const { critereId, query, country, adAccountId, relevanceScoreThreshold } = await request.json()
+    const threshold = typeof relevanceScoreThreshold === 'number' ? relevanceScoreThreshold : 0.3
     
     console.log(`🔍 RECHERCHE SUGGESTIONS FACEBOOK: "${query}" pour ${country}`)
     
@@ -603,18 +604,40 @@ export async function POST(request: NextRequest) {
     })
     
     // Recherche des nouvelles suggestions avec algorithme contextuel
-    const suggestions = await getFacebookInterestSuggestions(
+    const allSuggestions = await getFacebookInterestSuggestions(
       query, 
       country, 
       critere.categoryPath as string[], 
       critere.category
     )
+    // Filtrage dynamique selon le seuil de pertinence
+    const suggestions = allSuggestions.filter(s => s.finalScore >= threshold)
     
     if (suggestions.length === 0) {
       console.log('⚠️ Aucune suggestion trouvée')
+      
+      // Sauvegarder un marqueur pour indiquer que la requête a été effectuée
+      // même si aucune suggestion pertinente n'a été trouvée
+      await prisma.suggestionFacebook.create({
+        data: {
+          critereId,
+          label: `NO_SUGGESTIONS_${Date.now()}`, // Marqueur unique
+          audience: 0,
+          similarityScore: 0,
+          isBestMatch: false,
+          isSelectedByUser: false
+        }
+      })
+      
+      console.log('📝 Marqueur "aucune suggestion" sauvegardé pour tracking')
+      
       return NextResponse.json({ 
         message: 'Aucune suggestion trouvée',
-        suggestions: [] 
+        suggestions: [],
+        totalFound: 0,
+        relevantCount: 0,
+        irrelevantCount: allSuggestions.length,
+        processed: true // Indique que la requête a été traitée
       })
     }
     

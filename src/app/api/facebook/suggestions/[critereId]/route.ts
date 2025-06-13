@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
 
 // GET - Récupérer les suggestions d'un critère
 export async function GET(
   request: NextRequest,
-  { params }: { params: { critereId: string } }
+  { params }: { params: Promise<{ critereId: string }> }
 ) {
   try {
-    const { critereId } = params
+    const { critereId } = await params
     
     if (!critereId) {
       return NextResponse.json(
@@ -46,11 +46,13 @@ export async function GET(
 // PUT - Sélectionner une suggestion pour un critère
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { critereId: string } }
+  { params }: { params: Promise<{ critereId: string }> }
 ) {
   try {
-    const { critereId } = params
+    const { critereId } = await params
     const { suggestionId } = await request.json()
+    
+    console.log('🎯 Tentative sélection suggestion:', { critereId, suggestionId })
     
     if (!critereId || !suggestionId) {
       return NextResponse.json(
@@ -77,7 +79,7 @@ export async function PUT(
       data: { selectedSuggestionId: suggestionId }
     })
     
-    console.log(`🎯 Suggestion sélectionnée pour critère ${critereId}: "${selectedSuggestion.label}"`)
+    console.log(`✅ Suggestion sélectionnée pour critère ${critereId}: "${selectedSuggestion.label}"`)
     
     return NextResponse.json({
       message: 'Suggestion sélectionnée avec succès',

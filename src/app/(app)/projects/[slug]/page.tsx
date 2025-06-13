@@ -1,5 +1,5 @@
 import React from "react"
-import prisma from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from '@/lib/auth'
 import { notFound } from "next/navigation"
