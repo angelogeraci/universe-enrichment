@@ -52,8 +52,7 @@ export function Breadcrumb() {
         return 'Categories'
       case 'projects':
         return 'Projets'
-      case 'dashboard':
-        return 'Tableau de bord'
+
       case 'admin':
         return 'Administration'
       case 'profile':
@@ -73,7 +72,7 @@ export function Breadcrumb() {
     <nav className="text-sm text-muted-foreground mb-4" aria-label="Breadcrumb" data-cy="breadcrumb">
       <ol className="flex items-center space-x-2">
         <li>
-          <Link href="/" className="hover:underline">Accueil</Link>
+          <Link href="/projects" className="hover:underline">Projets</Link>
         </li>
         {segments.map((segment, idx) => {
           const href = "/" + segments.slice(0, idx + 1).join("/")

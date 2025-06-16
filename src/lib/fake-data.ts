@@ -1,17 +1,6 @@
 // Fake data for demo purposes
 
-export const fakeDashboard = {
-  stats: [
-    { label: 'Projets', value: 8 },
-    { label: 'Enrichissements', value: 21 },
-    { label: 'Utilisateurs', value: 4 },
-    { label: 'Modèles de scoring', value: 3 },
-  ],
-  notifications: [
-    { id: 1, message: 'Nouveau projet créé', date: '2024-06-03' },
-    { id: 2, message: 'Enrichissement terminé', date: '2024-06-02' },
-  ],
-}
+
 
 export const fakeProjects = [
   { id: 'p1', name: 'Campagne A', status: 'Actif', createdAt: '2024-05-01' },

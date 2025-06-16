@@ -46,15 +46,14 @@ export const useToast = () => {
 export const handleApiError = (error: any, customMessage?: string) => {
   const { error: showError } = useToast()
   
-  let message = customMessage || 'Une erreur inattendue s\'est produite'
+  let message = customMessage || 'An unexpected error occurred'
   
-  if (error?.message) {
-    message = error.message
-  } else if (typeof error === 'string') {
-    message = error
-  } else if (error?.response?.data?.error) {
+  if (error?.response?.data?.error) {
     message = error.response.data.error
+  } else if (error?.message) {
+    message = error.message
   }
   
-  showError(message, { duration: 6000 })
+  showError(message, { duration: 5000 })
+  console.error('API Error:', error)
 } 

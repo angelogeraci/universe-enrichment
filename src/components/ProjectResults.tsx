@@ -10,8 +10,12 @@ import { Checkbox } from './ui/checkbox'
 import { Badge } from './ui/badge'
 import { useToast } from '@/hooks/useToast'
 import * as XLSX from 'xlsx'
-import { RefreshCw, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { RefreshCw, Edit, Trash2, ChevronLeft, ChevronRight, Filter, X } from 'lucide-react'
+import BulkActionModal from './BulkActionModal'
+import EditCriteriaModal from './EditCriteriaModal'
 import Select from 'react-select'
+import { Skeleton } from './ui/skeleton'
+import { Pagination } from './ui/pagination'
 
 export type Critere = {
   id: string
@@ -185,6 +189,37 @@ function UpdateProgressBar({
   )
 }
 
+// Composant Skeleton pour les lignes en loading
+const CriteriaRowSkeleton = () => (
+  <tr className="animate-pulse">
+    <td className="px-2 py-2">
+      <Skeleton className="w-4 h-4" />
+    </td>
+    <td className="px-2 py-2">
+      <Skeleton className="h-4 w-3/4" />
+    </td>
+    <td className="px-2 py-2">
+      <Skeleton className="h-4 w-1/2" />
+    </td>
+    <td className="px-2 py-2">
+      <Skeleton className="h-4 w-20" />
+    </td>
+    <td className="px-2 py-2">
+      <Skeleton className="h-4 w-16" />
+    </td>
+    <td className="px-2 py-2">
+      <Skeleton className="h-4 w-12" />
+    </td>
+    <td className="px-2 py-2">
+      <div className="flex gap-2">
+        <Skeleton className="w-8 h-8" />
+        <Skeleton className="w-8 h-8" />
+        <Skeleton className="w-8 h-8" />
+      </div>
+    </td>
+  </tr>
+)
+
 export function ProjectResults ({
   isComplete = false,
   metrics = {
@@ -205,6 +240,7 @@ export function ProjectResults ({
   criteriaData = [],
   categoriesData = [],
   relevanceThreshold = 60,
+  onDataChange = () => {},
   ...props
 }: {
   isComplete?: boolean
@@ -215,23 +251,30 @@ export function ProjectResults ({
   criteriaData?: Critere[]
   categoriesData?: Array<{ name: string, path: string[], andCriteria?: string[] }>
   relevanceThreshold?: number
+  onDataChange?: () => void
   [key: string]: any
 }) {
+  const { success, error: showError } = useToast()
+  
+  // États pour la gestion du tableau
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<string[]>([])
-  const [sortBy, setSortBy] = useState<'label' | 'category' | 'status'>('label')
+  const [sortBy, setSortBy] = useState<'label' | 'category' | 'status' | 'audience' | 'relevance'>('label')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
-  const [loadingFacebook, setLoadingFacebook] = useState<{ [key: string]: boolean }>({})
-  const [openDropdowns, setOpenDropdowns] = useState<{ [key: string]: boolean }>({})
-  const { success, error: showError } = useToast()
-  const [filterRelevant, setFilterRelevant] = useState(true)
-  const [filterNonRelevant, setFilterNonRelevant] = useState(true)
-  const [resultsPerPage, setResultsPerPage] = useState(100)
-  const [currentPage, setCurrentPage] = useState(1)
+  const [loadingFacebook, setLoadingFacebook] = useState<Record<string, boolean>>({})
+  const [dropdownOpen, setDropdownOpen] = useState<string | null>(null)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [resultsPerPage, setResultsPerPage] = useState(25)
+  const [currentPage, setCurrentPage] = useState(1)
   const [updateProgress, setUpdateProgress] = useState({ current: 0, total: 0 })
   const [currentlyProcessing, setCurrentlyProcessing] = useState<string>('')
   const [updateKey, setUpdateKey] = useState(0)
+  const [loadingIndividualUpdate, setLoadingIndividualUpdate] = useState<Set<string>>(new Set())
+  const [loadingCriteria, setLoadingCriteria] = useState<Set<string>>(new Set())
+  
+  // États pour les filtres avancés
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const [scoreRange, setScoreRange] = useState({ min: 0, max: 100 })
 
   // Debug: Log des changements d'état
   useEffect(() => {
@@ -281,8 +324,8 @@ export function ProjectResults ({
       }
 
       success('Suggestion sélectionnée avec succès')
-      // Recharger les données
-      window.location.reload()
+      // Rafraîchir les données via SWR
+      onDataChange()
     } catch (error: any) {
       console.error('❌ Erreur sélection suggestion:', error)
       showError(error.message || 'Erreur lors de la sélection')
@@ -291,10 +334,7 @@ export function ProjectResults ({
 
   // Fonction pour basculer l'état du dropdown
   const toggleDropdown = (critereId: string) => {
-    setOpenDropdowns(prev => ({
-      ...prev,
-      [critereId]: !prev[critereId]
-    }))
+    setDropdownOpen(prev => prev === critereId ? null : critereId)
   }
 
   // Récupérer les suggestions Facebook pour un critère
@@ -324,8 +364,8 @@ export function ProjectResults ({
       const data = await response.json()
       success(`${data.suggestions.length} suggestions récupérées pour "${critere.label}"`, { duration: 3000 })
       
-      // Recharger les données pour voir les nouvelles suggestions
-      window.location.reload()
+      // Rafraîchir les données via SWR
+      onDataChange()
       
     } catch (error: any) {
       console.error('❌ Erreur suggestions Facebook:', error)
@@ -333,6 +373,80 @@ export function ProjectResults ({
     } finally {
       setLoadingFacebook(prev => ({ ...prev, [critere.id]: false }))
       setIsUpdating(false)
+    }
+  }
+
+  // Update individuel d'un critère avec skeleton
+  const handleIndividualUpdate = async (critere: Critere) => {
+    try {
+      // Ajouter le critère aux critères en loading
+      setLoadingIndividualUpdate(prev => new Set([...prev, critere.id]))
+      
+      console.log(`🔄 Update individuel pour: "${critere.label}"`)
+      
+      const response = await fetch('/api/facebook/suggestions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          critereId: critere.id,
+          query: critere.label,
+          country: critere.country
+        })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Erreur lors de la récupération des suggestions')
+      }
+      
+      const data = await response.json()
+      success(`${data.suggestions.length} suggestions récupérées pour "${critere.label}"`, { duration: 3000 })
+      
+      // Rafraîchir les données via SWR
+      onDataChange()
+      
+    } catch (error: any) {
+      console.error('❌ Erreur update individuel:', error)
+      showError(error.message || 'Erreur lors de la récupération des suggestions Facebook', { duration: 5000 })
+    } finally {
+      // Retirer le critère des critères en loading
+      setLoadingIndividualUpdate(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(critere.id)
+        return newSet
+      })
+    }
+  }
+
+  // Suppression individuelle d'un critère avec loader
+  const handleDeleteCritere = async (critereId: string) => {
+    try {
+      // Ajouter le critère aux critères en loading
+      setLoadingCriteria(prev => new Set([...prev, critereId]))
+      
+      const response = await fetch(`/api/criteres/${critereId}`, { 
+        method: 'DELETE' 
+      })
+      
+      if (response.ok) {
+        success('Critère supprimé avec succès')
+        
+        // Utiliser la callback pour mettre à jour les données parent au lieu de recharger la page
+        onDataChange()
+      } else {
+        showError('Erreur lors de la suppression du critère')
+      }
+    } catch (e) {
+      showError('Erreur lors de la suppression')
+    } finally {
+      // Retirer le critère des critères en loading
+      setLoadingCriteria(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(critereId)
+        return newSet
+      })
     }
   }
 
@@ -348,6 +462,15 @@ export function ProjectResults ({
       const showRelevant = relevanceFilter.some(opt => opt.value === 'relevant')
       const showNonRelevant = relevanceFilter.some(opt => opt.value === 'nonrelevant')
       const showNoSuggestion = relevanceFilter.some(opt => opt.value === 'nosuggestion')
+      
+      // Filtre par intervalle de score
+      if (mainSuggestion) {
+        const score = mainSuggestion.similarityScore
+        if (score < scoreRange.min || score > scoreRange.max) {
+          return false
+        }
+      }
+      
       if (showNoSuggestion && !hasSuggestions) return true
       if (!hasSuggestions) return false
       if (showRelevant && isRelevant) return true
@@ -358,14 +481,46 @@ export function ProjectResults ({
       data = data.filter(c => c.label.toLowerCase().includes(search.toLowerCase()) || c.category.toLowerCase().includes(search.toLowerCase()))
     }
     data = [...data].sort((a, b) => {
-      const vA = a[sortBy] || ''
-      const vB = b[sortBy] || ''
-      if (vA < vB) return sortDir === 'asc' ? -1 : 1
-      if (vA > vB) return sortDir === 'asc' ? 1 : -1
-      return 0
+      let vA, vB
+      
+      if (sortBy === 'audience') {
+        // Pour l'audience, récupérer l'audience de la meilleure suggestion
+        const suggA = getRealSuggestions(a.suggestions || []).find(s => s.isSelectedByUser) || 
+                     getRealSuggestions(a.suggestions || []).find(s => s.isBestMatch) || 
+                     getRealSuggestions(a.suggestions || [])[0]
+        const suggB = getRealSuggestions(b.suggestions || []).find(s => s.isSelectedByUser) || 
+                     getRealSuggestions(b.suggestions || []).find(s => s.isBestMatch) || 
+                     getRealSuggestions(b.suggestions || [])[0]
+        vA = suggA ? suggA.audience : 0
+        vB = suggB ? suggB.audience : 0
+      } else if (sortBy === 'relevance') {
+        // Pour la relevance, récupérer le score de similarité de la meilleure suggestion
+        const suggA = getRealSuggestions(a.suggestions || []).find(s => s.isSelectedByUser) || 
+                     getRealSuggestions(a.suggestions || []).find(s => s.isBestMatch) || 
+                     getRealSuggestions(a.suggestions || [])[0]
+        const suggB = getRealSuggestions(b.suggestions || []).find(s => s.isSelectedByUser) || 
+                     getRealSuggestions(b.suggestions || []).find(s => s.isBestMatch) || 
+                     getRealSuggestions(b.suggestions || [])[0]
+        vA = suggA ? suggA.similarityScore : 0
+        vB = suggB ? suggB.similarityScore : 0
+      } else {
+        // Pour les autres colonnes (label, category, status)
+        vA = a[sortBy as keyof Critere] || ''
+        vB = b[sortBy as keyof Critere] || ''
+      }
+      
+      if (typeof vA === 'number' && typeof vB === 'number') {
+        return sortDir === 'asc' ? vA - vB : vB - vA
+      } else {
+        const strA = String(vA).toLowerCase()
+        const strB = String(vB).toLowerCase()
+        if (strA < strB) return sortDir === 'asc' ? -1 : 1
+        if (strA > strB) return sortDir === 'asc' ? 1 : -1
+        return 0
+      }
     })
     return data
-  }, [criteriaData, search, sortBy, sortDir, relevanceFilter, relevanceThreshold])
+  }, [criteriaData, search, sortBy, sortDir, relevanceFilter, relevanceThreshold, scoreRange])
 
   const toggleSelect = (id: string) => {
     setSelected(sel => sel.includes(id) ? sel.filter(s => s !== id) : [...sel, id])
@@ -398,7 +553,7 @@ export function ProjectResults ({
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement
       if (!target.closest('.relative')) {
-        setOpenDropdowns({})
+        setDropdownOpen(null)
       }
     }
 
@@ -409,7 +564,7 @@ export function ProjectResults ({
   useEffect(() => {
     // Reset page si filtre ou nombre de résultats change
     setCurrentPage(1)
-  }, [resultsPerPage, search, sortBy, sortDir, relevanceFilter])
+  }, [resultsPerPage, search, sortBy, sortDir, relevanceFilter, scoreRange])
 
   // Fonction d'export XLSX
   const handleExportXLSX = () => {
@@ -484,7 +639,6 @@ export function ProjectResults ({
   // Suppression en masse des critères sélectionnés
   const handleDeleteSelected = async () => {
     if (selected.length === 0) return
-    if (!window.confirm(`Supprimer ${selected.length} critère(s) sélectionné(s) ? Cette action est irréversible.`)) return
     try {
       const results = await Promise.all(selected.map(id =>
         fetch(`/api/criteres/${id}`, { method: 'DELETE' })
@@ -492,10 +646,12 @@ export function ProjectResults ({
       const allOk = results.every(r => r.ok)
       if (allOk) {
         success(`${selected.length} critère(s) supprimé(s)`)
+        // Remettre à zéro la sélection après suppression
+        setSelected([])
       } else {
         showError('Erreur lors de la suppression de certains critères')
       }
-      window.location.reload()
+      onDataChange()
     } catch (e) {
       showError('Erreur lors de la suppression')
     }
@@ -507,11 +663,6 @@ export function ProjectResults ({
     
     if (selected.length === 0) {
       console.log('❌ Aucun critère sélectionné, arrêt')
-      return
-    }
-    
-    if (!window.confirm(`Relancer la récupération des suggestions Facebook pour ${selected.length} critère(s) ?`)) {
-      console.log('❌ Utilisateur a annulé')
       return
     }
     
@@ -590,13 +741,16 @@ export function ProjectResults ({
       console.log('🎉 MISE À JOUR TERMINÉE')
       success(`${selected.length} critère(s) mis à jour`)
       
+      // Remettre à zéro la sélection après mise à jour
+      setSelected([])
+      
       // Attendre un peu avant de recharger pour que l'utilisateur voie la completion
       console.log('⏳ Attente 1000ms avant reload...')
       await new Promise(resolve => setTimeout(resolve, 1000))
       
-      // Recharger les données pour voir les nouvelles suggestions
-      console.log('🔄 Rechargement de la page...')
-      window.location.reload()
+      // Rafraîchir les données via SWR
+      console.log('🔄 Rafraîchissement des données...')
+      onDataChange()
       
     } catch (e) {
       console.error('❌ ERREUR GLOBALE:', e)
@@ -661,18 +815,20 @@ export function ProjectResults ({
   if (onlyProgress) {
     return (
       <div className="w-full flex flex-col gap-8 mt-8">
-        {/* Barre de progression */}
-        <div className="w-full flex flex-col gap-2">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-sm font-medium text-muted-foreground">Progression</span>
-            <span className="text-xs text-muted-foreground">{progress.current}/{progress.total} criteria</span>
+        {/* Barre de progression - uniquement si le projet n'est pas terminé */}
+        {!isComplete && (
+          <div className="w-full flex flex-col gap-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-medium text-muted-foreground">Progression</span>
+              <span className="text-xs text-muted-foreground">{progress.current}/{progress.total} criteria</span>
+            </div>
+            <Progress value={progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0} />
+            <div className="flex items-center justify-between mt-1 text-xs text-muted-foreground">
+              <span>Step: {progress.step}</span>
+              <span>Errors: {progress.errors} | ETA: {progress.eta}</span>
+            </div>
           </div>
-          <Progress value={progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0} />
-          <div className="flex items-center justify-between mt-1 text-xs text-muted-foreground">
-            <span>Step: {progress.step}</span>
-            <span>Errors: {progress.errors} | ETA: {progress.eta}</span>
-          </div>
-        </div>
+        )}
 
         {/* Message d'attente si pas de critères */}
         {criteriaData.length === 0 && (
@@ -693,34 +849,38 @@ export function ProjectResults ({
                   onChange={e => setSearch(e.target.value)}
                   className="w-64"
                 />
-                <div style={{ minWidth: 220 }}>
-                  <Select
-                    isMulti
-                    options={relevanceOptions}
-                    value={relevanceFilter}
-                    onChange={opts => setRelevanceFilter(opts as typeof relevanceOptions)}
-                    closeMenuOnSelect={false}
-                    hideSelectedOptions={false}
-                    placeholder="Filtrer..."
-                    classNamePrefix="relevance-select"
-                    styles={{
-                      control: base => ({ ...base, minHeight: 36, borderRadius: 6 }),
-                      menu: base => ({ ...base, zIndex: 50 }),
-                      multiValue: base => ({ ...base, background: '#e0e7ff', color: '#1e40af' }),
-                    }}
-                  />
-                </div>
+                <Button 
+                  size="sm" 
+                  variant={showAdvancedFilters ? "default" : "outline"}
+                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                >
+                  <Filter size={16} className="mr-2" />
+                  Filtres {showAdvancedFilters && <X size={14} className="ml-1" />}
+                </Button>
                 <Button size="sm" variant="default" onClick={handleExportXLSX}>
                   Exporter en XLSX
                 </Button>
                 {selected.length > 0 && (
                   <>
-                    <Button size="sm" variant="secondary" onClick={handleUpdateSelected}>
-                      <RefreshCw size={16} className="mr-2" /> Update ({selected.length})
-                    </Button>
-                    <Button size="sm" variant="destructive" onClick={handleDeleteSelected}>
-                      <Trash2 size={16} className="mr-2" /> Supprimer ({selected.length})
-                    </Button>
+                    <BulkActionModal
+                      action="update"
+                      selectedCount={selected.length}
+                      onConfirm={handleUpdateSelected}
+                      isLoading={isUpdating}
+                    >
+                      <Button size="sm" variant="secondary" disabled={isUpdating}>
+                        <RefreshCw size={16} className="mr-2" /> Update ({selected.length})
+                      </Button>
+                    </BulkActionModal>
+                    <BulkActionModal
+                      action="delete"
+                      selectedCount={selected.length}
+                      onConfirm={handleDeleteSelected}
+                    >
+                      <Button size="sm" variant="destructive">
+                        <Trash2 size={16} className="mr-2" /> Supprimer ({selected.length})
+                      </Button>
+                    </BulkActionModal>
                   </>
                 )}
               </div>
@@ -729,19 +889,72 @@ export function ProjectResults ({
               </div>
             </div>
 
-            <div className="flex items-center gap-4 mb-4">
-              <span className="text-sm">Résultats par page :</span>
-              <select
-                className="border rounded px-2 py-1 text-sm"
-                value={resultsPerPage}
-                onChange={e => setResultsPerPage(Number(e.target.value))}
-              >
-                {resultsPerPageOptions.map(n => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-              <span className="text-muted-foreground text-xs">{totalResults} résultats</span>
-            </div>
+            {/* Panneau de filtres avancés */}
+            {showAdvancedFilters && (
+              <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <h3 className="text-sm font-medium mb-3 text-gray-700">Filtres avancés</h3>
+                <div className="space-y-4">
+                  {/* Filtre par pertinence */}
+                  <div className="flex items-center gap-4">
+                    <label className="text-sm text-gray-600 min-w-[80px]">Pertinence :</label>
+                    <div style={{ minWidth: 280 }}>
+                      <Select
+                        isMulti
+                        options={relevanceOptions}
+                        value={relevanceFilter}
+                        onChange={opts => setRelevanceFilter(opts as typeof relevanceOptions)}
+                        closeMenuOnSelect={false}
+                        hideSelectedOptions={false}
+                        placeholder="Sélectionner les types..."
+                        classNamePrefix="relevance-select"
+                        styles={{
+                          control: base => ({ ...base, minHeight: 32, borderRadius: 6, fontSize: '14px' }),
+                          menu: base => ({ ...base, zIndex: 50 }),
+                          multiValue: base => ({ ...base, background: '#e0e7ff', color: '#1e40af' }),
+                        }}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Filtre par intervalle de score */}
+                  <div className="flex items-center gap-4">
+                    <label className="text-sm text-gray-600 min-w-[80px]">Score :</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={scoreRange.min}
+                        onChange={(e) => setScoreRange(prev => ({ ...prev, min: Number(e.target.value) }))}
+                        className="w-20 h-8 text-sm"
+                        placeholder="Min"
+                      />
+                      <span className="text-sm text-gray-500">à</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={scoreRange.max}
+                        onChange={(e) => setScoreRange(prev => ({ ...prev, max: Number(e.target.value) }))}
+                        className="w-20 h-8 text-sm"
+                        placeholder="Max"
+                      />
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => setScoreRange({ min: 0, max: 100 })}
+                        className="h-8 text-xs"
+                      >
+                        Reset
+                      </Button>
+                      <div className="text-xs text-gray-500">
+                        ({scoreRange.min}% - {scoreRange.max}%)
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="border rounded-lg overflow-hidden">
               <table className="w-full">
@@ -757,14 +970,24 @@ export function ProjectResults ({
                       Catégorie {sortBy === 'category' && (sortDir === 'asc' ? '↑' : '↓')}
                     </th>
                     <th className="px-2 py-3 text-left">Suggestion Facebook</th>
-                    <th className="px-2 py-3 text-left">Score</th>
-                    <th className="px-2 py-3 text-left">Audience</th>
+                    <th className="px-2 py-3 text-left cursor-pointer hover:bg-muted/70" onClick={() => { setSortBy('relevance'); setSortDir(sortBy === 'relevance' && sortDir === 'asc' ? 'desc' : 'asc') }}>
+                      Score {sortBy === 'relevance' && (sortDir === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th className="px-2 py-3 text-left cursor-pointer hover:bg-muted/70" onClick={() => { setSortBy('audience'); setSortDir(sortBy === 'audience' && sortDir === 'asc' ? 'desc' : 'asc') }}>
+                      Audience {sortBy === 'audience' && (sortDir === 'asc' ? '↑' : '↓')}
+                    </th>
                     <th className="px-2 py-3 text-left">Actions</th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {paginated.map(critere => (
+                  {paginated.map(critere => {
+                    // Si le critère est en loading pour update individuel ou suppression, afficher le skeleton
+                    if (loadingIndividualUpdate.has(critere.id) || loadingCriteria.has(critere.id)) {
+                      return <CriteriaRowSkeleton key={critere.id} />
+                    }
+
+                    return (
                     <tr key={critere.id} className={`${selected.includes(critere.id) ? 'bg-blue-50' : ''}`}>
                       <td className="px-2 py-2"><Checkbox checked={selected.includes(critere.id)} onCheckedChange={() => toggleSelect(critere.id)} /></td>
                       <td className="px-2 py-2 font-medium">{critere.label}</td>
@@ -806,12 +1029,12 @@ export function ProjectResults ({
                                     const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
                                     return mainSuggestion?.label
                                   })()}
-                                  {/* Badge non pertinent si score < seuil */}
+                                  {/* Point rouge si score < seuil */}
                                   {(() => {
                                     const realSuggestions = getRealSuggestions(critere.suggestions || [])
                                     const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
                                     if (mainSuggestion && mainSuggestion.similarityScore < relevanceThreshold) {
-                                      return <span className="ml-2 text-xs text-red-600 font-semibold">Non pertinent</span>
+                                      return null
                                     }
                                     return null
                                   })()}
@@ -828,9 +1051,9 @@ export function ProjectResults ({
                                     if (mainSuggestion && mainSuggestion.isBestMatch && mainSuggestion.similarityScore >= relevanceThreshold) {
                                       return <Badge variant="default" className="text-xs px-1 py-0">Best</Badge>
                                     }
-                                    // Badge Non pertinent si score < seuil
+                                    // Point rouge si score < seuil - dans les badges on garde le comportement par défaut
                                     if (mainSuggestion && mainSuggestion.similarityScore < relevanceThreshold) {
-                                      return <Badge variant="destructive" className="text-xs px-1 py-0">Non pertinent</Badge>
+                                      return null // On n'affiche plus de badge, le point rouge suffit
                                     }
                                     return null
                                   })()}
@@ -858,7 +1081,7 @@ export function ProjectResults ({
                             </div>
 
                             {/* Dropdown avec toutes les suggestions */}
-                            {openDropdowns[critere.id] && (
+                            {dropdownOpen === critere.id && (
                               <div className="absolute top-full left-0 right-0 z-[9999] mt-1 bg-white border rounded-lg shadow-xl max-h-64 overflow-y-auto">
                                 {getRealSuggestions(critere.suggestions || []).map((suggestion, index) => {
                                   const isVeryHighQuality = suggestion.similarityScore >= 80
@@ -886,7 +1109,7 @@ export function ProjectResults ({
                                             {isVeryHighQuality && <div className="w-2 h-2 bg-green-500 rounded-full" title="Très haute qualité"></div>}
                                             {isHighQuality && !isVeryHighQuality && <div className="w-2 h-2 bg-yellow-500 rounded-full" title="Haute qualité"></div>}
                                             {isMediumQuality && !isHighQuality && <div className="w-2 h-2 bg-orange-500 rounded-full" title="Qualité moyenne"></div>}
-                                            {isLowQuality && <div className="w-2 h-2 bg-red-500 rounded-full" title="Faible qualité - Non pertinente"></div>}
+
                                           </div>
                                           <div className="text-xs text-muted-foreground mt-1">
                                             Score: {suggestion.similarityScore}% • 
@@ -898,7 +1121,6 @@ export function ProjectResults ({
                                         <div className="flex items-center gap-1 ml-2">
                                           {suggestion.isSelectedByUser && <Badge variant="outline" className="text-xs px-1 py-0">Selected</Badge>}
                                           {suggestion.isBestMatch && suggestion.similarityScore >= relevanceThreshold && <Badge variant="default" className="text-xs px-1 py-0">Best</Badge>}
-                                          {suggestion.similarityScore < relevanceThreshold && <Badge variant="destructive" className="text-xs px-1 py-0">Non pertinent</Badge>}
                                         </div>
                                       </div>
                                     </div>
@@ -960,18 +1182,26 @@ export function ProjectResults ({
                           <Button 
                             size="icon" 
                             variant="outline"
-                            disabled={loadingFacebook[critere.id]}
-                            onClick={() => handleGetFacebookSuggestions(critere)}
+                            disabled={loadingIndividualUpdate.has(critere.id)}
+                            onClick={() => handleIndividualUpdate(critere)}
                             title="Rafraîchir les suggestions Facebook"
                           >
-                            <RefreshCw className={loadingFacebook[critere.id] ? 'animate-spin' : ''} size={18} />
+                            <RefreshCw className={loadingIndividualUpdate.has(critere.id) ? 'animate-spin' : ''} size={18} />
                           </Button>
                           <Button size="icon" variant="outline" title="Éditer"><Edit size={18} /></Button>
-                          <Button size="icon" variant="destructive" title="Supprimer"><Trash2 size={18} /></Button>
+                          <Button 
+                            size="icon" 
+                            variant="destructive" 
+                            title="Supprimer" 
+                            onClick={() => handleDeleteCritere(critere.id)}
+                          >
+                            <Trash2 size={18} />
+                          </Button>
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                   {paginated.length === 0 && (
                     <tr><td colSpan={8} className="text-center py-4 text-muted-foreground">No criteria found.</td></tr>
                   )}
@@ -979,29 +1209,16 @@ export function ProjectResults ({
               </table>
             </div>
             {/* Pagination controls */}
-            <div className="flex items-center justify-between mt-4">
-              <div className="text-xs text-muted-foreground">
-                Page {currentPage} sur {totalPages}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button size="icon" variant="ghost" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>
-                  <ChevronLeft size={18} />
-                </Button>
-                {[...Array(totalPages).keys()].slice(Math.max(0, currentPage - 3), currentPage + 2).map(i => (
-                  <Button
-                    key={i + 1}
-                    size="sm"
-                    variant={currentPage === i + 1 ? 'default' : 'outline'}
-                    onClick={() => setCurrentPage(i + 1)}
-                  >
-                    {i + 1}
-                  </Button>
-                ))}
-                <Button size="icon" variant="ghost" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>
-                  <ChevronRight size={18} />
-                </Button>
-              </div>
-            </div>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={filtered.length}
+              pageSize={resultsPerPage}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setResultsPerPage}
+              canPreviousPage={currentPage > 1}
+              canNextPage={currentPage < totalPages}
+            />
           </div>
         )}
       </div>
@@ -1053,18 +1270,20 @@ export function ProjectResults ({
         </div>
       </div>
 
-      {/* Barre de progression - toujours affichée */}
-      <div className="w-full flex flex-col gap-2">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-sm font-medium text-muted-foreground">Progression</span>
-          <span className="text-xs text-muted-foreground">{progress.current}/{progress.total} criteria</span>
+      {/* Barre de progression - uniquement si le projet n'est pas terminé */}
+      {!isComplete && (
+        <div className="w-full flex flex-col gap-2">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm font-medium text-muted-foreground">Progression</span>
+            <span className="text-xs text-muted-foreground">{progress.current}/{progress.total} criteria</span>
+          </div>
+          <Progress value={progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0} />
+          <div className="flex items-center justify-between mt-1 text-xs text-muted-foreground">
+            <span>Step: {progress.step}</span>
+            <span>Errors: {progress.errors} | ETA: {progress.eta}</span>
+          </div>
         </div>
-        <Progress value={progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0} />
-        <div className="flex items-center justify-between mt-1 text-xs text-muted-foreground">
-          <span>Step: {progress.step}</span>
-          <span>Errors: {progress.errors} | ETA: {progress.eta}</span>
-        </div>
-      </div>
+      )}
 
       {/* Message d'attente si pas de critères */}
       {criteriaData.length === 0 && (
@@ -1107,12 +1326,25 @@ export function ProjectResults ({
               </Button>
               {selected.length > 0 && (
                 <>
-                  <Button size="sm" variant="secondary" onClick={handleUpdateSelected}>
-                    <RefreshCw size={16} className="mr-2" /> Update ({selected.length})
-                  </Button>
-                  <Button size="sm" variant="destructive" onClick={handleDeleteSelected}>
-                    <Trash2 size={16} className="mr-2" /> Supprimer ({selected.length})
-                  </Button>
+                  <BulkActionModal
+                    action="update"
+                    selectedCount={selected.length}
+                    onConfirm={handleUpdateSelected}
+                    isLoading={isUpdating}
+                  >
+                    <Button size="sm" variant="secondary" disabled={isUpdating}>
+                      <RefreshCw size={16} className="mr-2" /> Update ({selected.length})
+                    </Button>
+                  </BulkActionModal>
+                  <BulkActionModal
+                    action="delete"
+                    selectedCount={selected.length}
+                    onConfirm={handleDeleteSelected}
+                  >
+                    <Button size="sm" variant="destructive">
+                      <Trash2 size={16} className="mr-2" /> Supprimer ({selected.length})
+                    </Button>
+                  </BulkActionModal>
                 </>
               )}
             </div>
@@ -1121,19 +1353,7 @@ export function ProjectResults ({
             </div>
           </div>
 
-          <div className="flex items-center gap-4 mb-4">
-            <span className="text-sm">Résultats par page :</span>
-            <select
-              className="border rounded px-2 py-1 text-sm"
-              value={resultsPerPage}
-              onChange={e => setResultsPerPage(Number(e.target.value))}
-            >
-              {resultsPerPageOptions.map(n => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-            <span className="text-muted-foreground text-xs">{totalResults} résultats</span>
-          </div>
+          
 
           <div className="border rounded-lg overflow-hidden">
             <table className="w-full">
@@ -1149,14 +1369,24 @@ export function ProjectResults ({
                     Catégorie {sortBy === 'category' && (sortDir === 'asc' ? '↑' : '↓')}
                   </th>
                   <th className="px-2 py-3 text-left">Suggestion Facebook</th>
-                  <th className="px-2 py-3 text-left">Score</th>
-                  <th className="px-2 py-3 text-left">Audience</th>
+                  <th className="px-2 py-3 text-left cursor-pointer hover:bg-muted/70" onClick={() => { setSortBy('relevance'); setSortDir(sortBy === 'relevance' && sortDir === 'asc' ? 'desc' : 'asc') }}>
+                    Score {sortBy === 'relevance' && (sortDir === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th className="px-2 py-3 text-left cursor-pointer hover:bg-muted/70" onClick={() => { setSortBy('audience'); setSortDir(sortBy === 'audience' && sortDir === 'asc' ? 'desc' : 'asc') }}>
+                    Audience {sortBy === 'audience' && (sortDir === 'asc' ? '↑' : '↓')}
+                  </th>
                   <th className="px-2 py-3 text-left">Actions</th>
                 </tr>
               </thead>
 
               <tbody>
-                {paginated.map(critere => (
+                {paginated.map(critere => {
+                  // Si le critère est en loading pour update individuel ou suppression, afficher le skeleton
+                  if (loadingIndividualUpdate.has(critere.id) || loadingCriteria.has(critere.id)) {
+                    return <CriteriaRowSkeleton key={critere.id} />
+                  }
+
+                  return (
                   <tr key={critere.id} className={`${selected.includes(critere.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-2 py-2"><Checkbox checked={selected.includes(critere.id)} onCheckedChange={() => toggleSelect(critere.id)} /></td>
                     <td className="px-2 py-2 font-medium">{critere.label}</td>
@@ -1203,7 +1433,7 @@ export function ProjectResults ({
                                   const realSuggestions = getRealSuggestions(critere.suggestions || [])
                                   const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
                                   if (mainSuggestion && mainSuggestion.similarityScore < relevanceThreshold) {
-                                    return <span className="ml-2 text-xs text-red-600 font-semibold">Non pertinent</span>
+                                    return null
                                   }
                                   return null
                                 })()}
@@ -1220,9 +1450,9 @@ export function ProjectResults ({
                                   if (mainSuggestion && mainSuggestion.isBestMatch && mainSuggestion.similarityScore >= relevanceThreshold) {
                                     return <Badge variant="default" className="text-xs px-1 py-0">Best</Badge>
                                   }
-                                  // Badge Non pertinent si score < seuil
+                                  // Point rouge si score < seuil - dans les badges on garde le comportement par défaut
                                   if (mainSuggestion && mainSuggestion.similarityScore < relevanceThreshold) {
-                                    return <Badge variant="destructive" className="text-xs px-1 py-0">Non pertinent</Badge>
+                                    return null // On n'affiche plus de badge, le point rouge suffit
                                   }
                                   return null
                                 })()}
@@ -1250,7 +1480,7 @@ export function ProjectResults ({
                           </div>
 
                           {/* Dropdown avec toutes les suggestions */}
-                          {openDropdowns[critere.id] && (
+                          {dropdownOpen === critere.id && (
                             <div className="absolute top-full left-0 right-0 z-[9999] mt-1 bg-white border rounded-lg shadow-xl max-h-64 overflow-y-auto">
                               {getRealSuggestions(critere.suggestions || []).map((suggestion, index) => {
                                 const isVeryHighQuality = suggestion.similarityScore >= 80
@@ -1278,7 +1508,7 @@ export function ProjectResults ({
                                           {isVeryHighQuality && <div className="w-2 h-2 bg-green-500 rounded-full" title="Très haute qualité"></div>}
                                           {isHighQuality && !isVeryHighQuality && <div className="w-2 h-2 bg-yellow-500 rounded-full" title="Haute qualité"></div>}
                                           {isMediumQuality && !isHighQuality && <div className="w-2 h-2 bg-orange-500 rounded-full" title="Qualité moyenne"></div>}
-                                          {isLowQuality && <div className="w-2 h-2 bg-red-500 rounded-full" title="Faible qualité - Non pertinente"></div>}
+
                                         </div>
                                         <div className="text-xs text-muted-foreground mt-1">
                                           Score: {suggestion.similarityScore}% • 
@@ -1290,7 +1520,6 @@ export function ProjectResults ({
                                       <div className="flex items-center gap-1 ml-2">
                                         {suggestion.isSelectedByUser && <Badge variant="outline" className="text-xs px-1 py-0">Selected</Badge>}
                                         {suggestion.isBestMatch && suggestion.similarityScore >= relevanceThreshold && <Badge variant="default" className="text-xs px-1 py-0">Best</Badge>}
-                                        {suggestion.similarityScore < relevanceThreshold && <Badge variant="destructive" className="text-xs px-1 py-0">Non pertinent</Badge>}
                                       </div>
                                     </div>
                                   </div>
@@ -1352,18 +1581,39 @@ export function ProjectResults ({
                         <Button 
                           size="icon" 
                           variant="outline"
-                          disabled={loadingFacebook[critere.id]}
-                          onClick={() => handleGetFacebookSuggestions(critere)}
+                          disabled={loadingIndividualUpdate.has(critere.id)}
+                          onClick={() => handleIndividualUpdate(critere)}
                           title="Rafraîchir les suggestions Facebook"
                         >
-                          <RefreshCw className={loadingFacebook[critere.id] ? 'animate-spin' : ''} size={18} />
+                          <RefreshCw className={loadingIndividualUpdate.has(critere.id) ? 'animate-spin' : ''} size={18} />
                         </Button>
-                        <Button size="icon" variant="outline" title="Éditer"><Edit size={18} /></Button>
-                        <Button size="icon" variant="destructive" title="Supprimer"><Trash2 size={18} /></Button>
+                        <EditCriteriaModal
+                          critere={critere}
+                          categoriesData={categoriesData}
+                          onCriteriaUpdated={onDataChange}
+                        >
+                          <Button 
+                            size="icon" 
+                            variant="outline" 
+                            title="Éditer"
+                            onClick={() => console.log('Edit button clicked in ProjectResults for:', critere)}
+                          >
+                            <Edit size={18} />
+                          </Button>
+                        </EditCriteriaModal>
+                        <Button 
+                          size="icon" 
+                          variant="destructive" 
+                          title="Supprimer"
+                          onClick={() => handleDeleteCritere(critere.id)}
+                        >
+                          <Trash2 size={18} />
+                        </Button>
                       </div>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
                 {paginated.length === 0 && (
                   <tr><td colSpan={8} className="text-center py-4 text-muted-foreground">No criteria found.</td></tr>
                 )}
@@ -1371,29 +1621,16 @@ export function ProjectResults ({
             </table>
           </div>
           {/* Pagination controls */}
-          <div className="flex items-center justify-between mt-4">
-            <div className="text-xs text-muted-foreground">
-              Page {currentPage} sur {totalPages}
-            </div>
-            <div className="flex items-center gap-2">
-              <Button size="icon" variant="ghost" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>
-                <ChevronLeft size={18} />
-              </Button>
-              {[...Array(totalPages).keys()].slice(Math.max(0, currentPage - 3), currentPage + 2).map(i => (
-                <Button
-                  key={i + 1}
-                  size="sm"
-                  variant={currentPage === i + 1 ? 'default' : 'outline'}
-                  onClick={() => setCurrentPage(i + 1)}
-                >
-                  {i + 1}
-                </Button>
-              ))}
-              <Button size="icon" variant="ghost" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>
-                <ChevronRight size={18} />
-              </Button>
-            </div>
-          </div>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            pageSize={resultsPerPage}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setResultsPerPage}
+            canPreviousPage={currentPage > 1}
+            canNextPage={currentPage < totalPages}
+          />
         </div>
       )}
     </div>

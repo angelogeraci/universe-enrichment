@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 
 interface DeleteConfirmModalProps {
   children: React.ReactNode
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
   title: string
   description: string
   isLoading?: boolean
@@ -21,9 +21,14 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
 }) => {
   const [open, setOpen] = React.useState(false)
 
-  const handleConfirm = () => {
-    onConfirm()
-    setOpen(false)
+  const handleConfirm = async () => {
+    try {
+      await onConfirm()
+      setOpen(false)
+    } catch (error) {
+      // Ne pas fermer le modal en cas d'erreur
+      console.error('Erreur lors de la confirmation:', error)
+    }
   }
 
   return (

@@ -6,7 +6,7 @@ import PromptAdminEditor from '@/components/PromptAdminEditor'
 export default async function AdminPromptsPage() {
   const session = await getServerSession(authOptions)
   if (!session?.user || session.user.role !== 'admin') {
-    redirect('/dashboard')
+    redirect('/projects')
   }
   return (
     <div className="w-full px-32 py-6">

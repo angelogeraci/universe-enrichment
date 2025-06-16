@@ -6,7 +6,7 @@ import Link from 'next/link'
 export default async function AdminPage() {
   const session = await getServerSession(authOptions)
   if (!session?.user || session.user.role !== 'admin') {
-    redirect('/dashboard')
+    redirect('/projects')
   }
   return (
     <div className="w-full px-32 py-6">

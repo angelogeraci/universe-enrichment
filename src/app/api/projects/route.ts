@@ -12,12 +12,12 @@ export async function POST (req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     const body = await req.json()
     const { name, description, country, searchType, categoryListId } = body
     if (!name) {
-      return NextResponse.json({ error: 'Le nom du projet est requis' }, { status: 400 })
+      return NextResponse.json({ error: 'Project name is required' }, { status: 400 })
     }
     if (!country || !searchType || !categoryListId) {
       return NextResponse.json({ error: 'Champs manquants' }, { status: 400 })
@@ -48,19 +48,19 @@ export async function POST (req: NextRequest) {
       }
     })
 
-    console.log('🚀 PROJET CRÉÉ:', project.name, 'ID:', project.id)
+    console.log('🚀 PROJECT CREATED:', project.name, 'ID:', project.id)
     console.log('📁 CATÉGORIES TROUVÉES:', project.categoryList.categories.length)
 
     // Déclencher l'enrichissement automatique en arrière-plan
     triggerEnrichment(project, project.categoryList.categories, req)
       .catch(err => {
-        console.error('❌ ERREUR ENRICHISSEMENT GLOBAL:', err)
+        console.error('❌ GLOBAL ENRICHMENT ERROR:', err)
       })
 
-    return NextResponse.json({ message: 'Projet créé avec succès', project })
+    return NextResponse.json({ message: 'Project created successfully', project })
   } catch (error) {
-    console.error('Erreur lors de la création du projet:', error)
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+    console.error('Error creating project:', error)
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
 
@@ -291,8 +291,14 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    // Récupérer le seuil de pertinence depuis les settings
+    const relevanceSettings = await prisma.appSetting.findFirst({
+      where: { key: 'facebookRelevanceScoreThreshold' }
+    })
+    const relevanceThreshold = Number(relevanceSettings?.value || 0.3)
 
     const projects = await prisma.project.findMany({
       where: { ownerId: session.user.id },
@@ -303,14 +309,47 @@ export async function GET() {
       orderBy: { createdAt: 'desc' }
     })
 
-    const mapped = projects.map(p => ({
-      ...p,
-      criteriaMatchCount: p._count.criteres
+    // Mapping des codes pays vers drapeaux
+    const countryFlags: Record<string, string> = {
+      'FR': '🇫🇷', 'US': '🇺🇸', 'GB': '🇬🇧', 'DE': '🇩🇪', 'ES': '🇪🇸', 
+      'IT': '🇮🇹', 'CA': '🇨🇦', 'AU': '🇦🇺', 'JP': '🇯🇵', 'CN': '🇨🇳',
+      'IN': '🇮🇳', 'BR': '🇧🇷', 'MX': '🇲🇽', 'AR': '🇦🇷', 'CL': '🇨🇱',
+      'PE': '🇵🇪', 'CO': '🇨🇴', 'VE': '🇻🇪', 'EC': '🇪🇨', 'BO': '🇧🇴',
+      'PY': '🇵🇾', 'UY': '🇺🇾', 'GY': '🇬🇾', 'SR': '🇸🇷', 'TR': '🇹🇷',
+      'RU': '🇷🇺', 'KR': '🇰🇷', 'TH': '🇹🇭', 'VN': '🇻🇳', 'PH': '🇵🇭',
+      'ID': '🇮🇩', 'MY': '🇲🇾', 'SG': '🇸🇬', 'NZ': '🇳🇿', 'ZA': '🇿🇦',
+      'EG': '🇪🇬', 'MA': '🇲🇦', 'NG': '🇳🇬', 'KE': '🇰🇪', 'GH': '🇬🇭',
+      'ET': '🇪🇹', 'TZ': '🇹🇿', 'UG': '🇺🇬', 'ZW': '🇿🇼', 'ZM': '🇿🇲',
+      'MW': '🇲🇼', 'MZ': '🇲🇿', 'AO': '🇦🇴', 'NA': '🇳🇦', 'BW': '🇧🇼',
+      'LS': '🇱🇸', 'SZ': '🇸🇿', 'MG': '🇲🇬', 'MU': '🇲🇺', 'SC': '🇸🇨'
+    }
+
+    const mapped = await Promise.all(projects.map(async (p) => {
+      // Compter les critères pertinents basés sur le relevanceScore
+      const validCriteria = await prisma.critere.count({
+        where: {
+          projectId: p.id,
+          suggestions: {
+            some: {
+              similarityScore: {
+                gte: relevanceThreshold
+              }
+            }
+          }
+        }
+      })
+
+      return {
+        ...p,
+        criteriaMatchCount: p._count.criteres,
+        validCriteriaCount: validCriteria,
+        countryFlag: countryFlags[p.country] || '🏳️'
+      }
     }))
 
     return NextResponse.json({ projects: mapped })
   } catch (error) {
-    console.error('Erreur lors de la récupération des projets:', error)
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+    console.error('Error retrieving projects:', error)
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 } 

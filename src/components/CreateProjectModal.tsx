@@ -12,7 +12,7 @@ import { useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/useToast'
 
 const schema = z.object({
-  name: z.string().min(2, "Le nom du projet est requis"),
+  name: z.string().min(2, "Project name is required"),
   description: z.string().optional(),
 })
 
@@ -27,6 +27,7 @@ export type Project = {
   country: string
   countryFlag: string
   criteriaMatchCount: number
+  validCriteriaCount?: number
   progressStatus: 'error' | 'in_progress' | 'ready'
   createdAt: string
   enrichmentStatus?: 'pending' | 'done'
@@ -74,13 +75,13 @@ export default function CreateProjectModal({
         
         if (!response.ok) {
           const errorData = await response.json()
-          const errorMessage = errorData.error || 'Erreur lors de la modification'
+          const errorMessage = errorData.error || 'Error modifying project'
           setError(errorMessage)
           showError(errorMessage, { duration: 5000 })
           return
         }
         
-        success('Projet modifié avec succès !', { duration: 3000 })
+        success('Project modified successfully!', { duration: 3000 })
         setOpen(false)
         reset()
         if (onProjectCreated) onProjectCreated()
@@ -93,7 +94,7 @@ export default function CreateProjectModal({
         router.push('/projects/create')
       }
     } catch (e: any) {
-      const errorMessage = e.message || "Erreur inconnue"
+      const errorMessage = e.message || "Unknown error"
       setError(errorMessage)
       showError(errorMessage, { duration: 5000 })
     }
@@ -110,20 +111,20 @@ export default function CreateProjectModal({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        {children || <Button>{mode === 'edit' ? 'Éditer' : 'Nouveau projet'}</Button>}
+        {children || <Button>{mode === 'edit' ? 'Edit' : 'New Project'}</Button>}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {mode === 'edit' ? 'Éditer le projet' : 'Créer un nouveau projet'}
+            {mode === 'edit' ? 'Edit Project' : 'Create New Project'}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
-            <label htmlFor="project-name" className="block text-sm font-medium mb-1">Nom du projet</label>
+            <label htmlFor="project-name" className="block text-sm font-medium mb-1">Project Name</label>
             <Input 
               id="project-name"
-              placeholder="Ex: Campagne France 2024" 
+              placeholder="Ex: France Campaign 2024" 
               {...register("name")} 
             />
             {errors.name && (
@@ -135,7 +136,7 @@ export default function CreateProjectModal({
             <label htmlFor="project-description" className="block text-sm font-medium mb-1">Description</label>
             <Textarea 
               id="project-description"
-              placeholder="Décrivez brièvement l'objectif de ce projet... (optionnel)"
+              placeholder="Briefly describe the objective of this project... (optional)"
               rows={4}
               {...register("description")} 
             />
@@ -155,7 +156,7 @@ export default function CreateProjectModal({
               onClick={() => setOpen(false)}
               className="flex-1"
             >
-              Annuler
+              Cancel
             </Button>
             <Button 
               type="submit" 
@@ -163,8 +164,8 @@ export default function CreateProjectModal({
               className="flex-1"
             >
               {isSubmitting 
-                ? (mode === 'edit' ? "Modification..." : "Création...") 
-                : (mode === 'edit' ? "Modifier" : "Continuer")
+                ? (mode === 'edit' ? "Updating..." : "Creating...") 
+                : (mode === 'edit' ? "Update" : "Continue")
               }
             </Button>
           </div>

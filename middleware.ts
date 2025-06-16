@@ -27,7 +27,7 @@ export async function middleware (req: NextRequest) {
   }
   // Protection spécifique pour /admin
   if (pathname.startsWith('/admin') && token.role !== 'admin') {
-    return NextResponse.redirect(new URL('/dashboard', req.url))
+    return NextResponse.redirect(new URL('/projects', req.url))
   }
   return NextResponse.next()
 }

@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import useSWR, { mutate as globalMutate } from 'swr'
-import ProjectResults, { Critere } from './ProjectResults'
+import { ProjectResults, Critere } from './ProjectResults'
+import { Skeleton } from './ui/skeleton'
 
 type EnrichmentStatus = 'pending' | 'processing' | 'paused' | 'cancelled' | 'done' | 'error'
 
@@ -31,6 +32,50 @@ interface ProgressData {
   }
   pausedAt?: string
 }
+
+// Composant Skeleton pour le chargement de page
+const PageSkeleton = () => (
+  <div className="p-6 space-y-6">
+    {/* Métriques skeleton */}
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="p-4 border rounded-lg">
+          <Skeleton className="h-4 w-3/4 mb-2" />
+          <Skeleton className="h-8 w-1/2" />
+        </div>
+      ))}
+    </div>
+    
+    {/* Contrôles skeleton */}
+    <div className="flex justify-between items-center">
+      <div className="flex gap-2">
+        <Skeleton className="h-10 w-24" />
+        <Skeleton className="h-10 w-32" />
+      </div>
+      <Skeleton className="h-4 w-40" />
+    </div>
+    
+    {/* Tableau skeleton */}
+    <div className="border rounded-lg overflow-hidden">
+      <div className="bg-muted/50 p-3">
+        <div className="flex justify-between">
+          {[...Array(7)].map((_, i) => (
+            <Skeleton key={i} className="h-4 w-20" />
+          ))}
+        </div>
+      </div>
+      <div className="p-4 space-y-3">
+        {[...Array(10)].map((_, i) => (
+          <div key={i} className="flex justify-between items-center">
+            {[...Array(7)].map((_, j) => (
+              <Skeleton key={j} className="h-4 w-24" />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+)
 
 export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, totalCategories, onlyMetrics = false, onlyProgress = false, categoriesData = [] }: { 
   slug: string, 
@@ -130,6 +175,11 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
     return <div className="py-12 text-center text-destructive">Erreur lors de l'enrichissement IA. Veuillez réessayer ou contacter le support.</div>
   }
 
+  // Afficher le skeleton pendant le chargement initial
+  if (isLoading && currentStatus === 'done') {
+    return <PageSkeleton />
+  }
+
   if (currentStatus === 'done' && !isLoading && (!data || !Array.isArray(data.criteres))) {
     return <div className="py-12 text-center text-destructive">Erreur : Données IA manquantes ou mal structurées. Vérifie la génération côté backend/OpenAI.</div>
   }
@@ -150,68 +200,57 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
            currentStatus === 'paused' ? 'Mis en pause' :
            currentStatus === 'cancelled' ? 'Annulé' :
            currentStatus === 'processing' ? 'Traitement en cours...' : 
-           currentStatus === 'error' ? 'Erreur' : 'En attente...',
+           (currentStatus as EnrichmentStatus) === 'error' ? 'Erreur' : 'En attente...',
     percentage: currentStatus === 'done' ? 100 : Math.round((criteres.length / totalCategories) * 100),
-    errors: currentStatus === 'error' ? 1 : 0,
+    errors: (currentStatus as EnrichmentStatus) === 'error' ? 1 : 0,
     eta: currentStatus === 'processing' ? 'Calcul en cours...' : '-'
   }
 
-  // Mode onlyMetrics : retourner seulement les cards de métriques
+  // Si seuls les métriques doivent être affichées
   if (onlyMetrics) {
-    return <ProjectResults onlyMetrics metrics={metrics} categoriesData={categoriesData} criteriaData={criteres} relevanceThreshold={relevanceThreshold} controlProject={controlProject} />
+    return (
+      <ProjectResults
+        isComplete={currentStatus === 'done'}
+        onlyMetrics={true}
+        metrics={progressData?.metrics || { aiCriteria: 0, withFacebook: 0, valid: 0, totalCategories }}
+        progress={progressData?.progress || { current: 0, total: 0, step: 'Starting...', errors: 0, eta: '-' }}
+        criteriaData={data?.criteres || []}
+        categoriesData={categoriesData}
+        onDataChange={async () => {
+          await mutateCriteres()
+        }}
+      />
+    )
   }
 
-  // Mode onlyProgress : retourner seulement la progression et tableau
+  // Si seule la progression doit être affichée
   if (onlyProgress) {
-    if (['processing', 'pending', 'paused'].includes(currentStatus)) {
-      return <ProjectResults onlyProgress progress={progress} metrics={metrics} categoriesData={categoriesData} criteriaData={criteres} relevanceThreshold={relevanceThreshold} controlProject={controlProject} />
-    }
-    if (currentStatus === 'done') {
-      if (isLoading) {
-        return <div className="py-12 text-center text-muted-foreground">Chargement des critères...</div>
-      }
-      if (error) {
-        return <div className="py-12 text-center text-destructive">Erreur lors du chargement des critères.</div>
-      }
-      if (criteres.length === 0) {
-        return <div className="py-12 text-center text-destructive">Aucun critère généré par l'IA pour ce projet.</div>
-      }
-      return <ProjectResults isComplete criteriaData={criteres} progress={progress} onlyProgress categoriesData={categoriesData} onMutate={mutateCriteres} relevanceThreshold={relevanceThreshold} controlProject={controlProject} />
-    }
-    if (currentStatus === 'cancelled') {
-      return <div className="py-12 text-center text-muted-foreground">Projet annulé. {criteres.length > 0 ? `${criteres.length} critères générés avant l'annulation.` : ''}</div>
-    }
-    // Fallback pour onlyProgress
-    return <ProjectResults onlyProgress progress={progress} categoriesData={categoriesData} criteriaData={criteres} onMutate={mutateCriteres} relevanceThreshold={relevanceThreshold} controlProject={controlProject} />
+    return (
+      <ProjectResults
+        isComplete={currentStatus === 'done'}
+        onlyProgress={true}
+        metrics={progressData?.metrics || { aiCriteria: 0, withFacebook: 0, valid: 0, totalCategories }}
+        progress={progressData?.progress || { current: 0, total: 0, step: 'Starting...', errors: 0, eta: '-' }}
+        criteriaData={data?.criteres || []}
+        categoriesData={categoriesData}
+        onDataChange={async () => {
+          await mutateCriteres()
+        }}
+      />
+    )
   }
 
-  // Mode normal (complet)
-  if (['processing', 'pending', 'paused'].includes(currentStatus)) {
-    return (
-      <ProjectResults progress={progress} metrics={metrics} categoriesData={categoriesData} criteriaData={criteres} onMutate={mutateCriteres} relevanceThreshold={relevanceThreshold} controlProject={controlProject} />
-    )
-  }
-  if (currentStatus === 'done') {
-    if (isLoading) {
-      return <div className="py-12 text-center text-muted-foreground">Chargement des critères...</div>
-    }
-    if (error) {
-      return <div className="py-12 text-center text-destructive">Erreur lors du chargement des critères.</div>
-    }
-    if (criteres.length === 0) {
-      return <div className="py-12 text-center text-destructive">Aucun critère généré par l'IA pour ce projet.</div>
-    }
-    return (
-      <ProjectResults isComplete criteriaData={criteres} metrics={metrics} progress={progress} categoriesData={categoriesData} onMutate={mutateCriteres} relevanceThreshold={relevanceThreshold} controlProject={controlProject} />
-    )
-  }
-  if (currentStatus === 'cancelled') {
-    return <div className="py-12 text-center text-muted-foreground">Projet annulé. {criteres.length > 0 ? `${criteres.length} critères générés avant l'annulation.` : ''}</div>
-  }
-  
-  // Statut par défaut (fallback)
   return (
-    <ProjectResults progress={progress} metrics={metrics} categoriesData={categoriesData} criteriaData={criteres} onMutate={mutateCriteres} relevanceThreshold={relevanceThreshold} controlProject={controlProject} />
+    <ProjectResults
+      isComplete={currentStatus === 'done'}
+      metrics={progressData?.metrics || { aiCriteria: 0, withFacebook: 0, valid: 0, totalCategories }}
+      progress={progressData?.progress || { current: 0, total: 0, step: 'Starting...', errors: 0, eta: '-' }}
+      criteriaData={data?.criteres || []}
+      categoriesData={categoriesData}
+      onDataChange={async () => {
+        await mutateCriteres()
+      }}
+    />
   )
 }
 

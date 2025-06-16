@@ -7,19 +7,23 @@ import {
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
+  getPaginationRowModel,
   flexRender,
   createColumnHelper,
   RowSelectionState,
+  PaginationState,
 } from "@tanstack/react-table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Checkbox } from "@/components/ui/checkbox"
 import { format } from "date-fns"
+import { Edit, Trash2, Eye } from "lucide-react"
 import CreateProjectModal, { Project } from "@/components/CreateProjectModal"
 import DeleteConfirmModal from "@/components/DeleteConfirmModal"
 import StatusTag from '@/components/StatusTag'
 import { useToast } from '@/hooks/useToast'
+import { Pagination } from "@/components/ui/pagination"
 
 // --- Mock data type ---
 export type { Project } from "@/components/CreateProjectModal"
@@ -29,9 +33,10 @@ const mockProjects: Project[] = [
     id: "1",
     country: "FR",
     countryFlag: "🇫🇷",
-    name: "Projet France",
-    description: "Analyse du marché français.",
+    name: "France Project",
+    description: "French market analysis.",
     criteriaMatchCount: 5,
+    validCriteriaCount: 3,
     progressStatus: "ready",
     createdAt: new Date().toISOString(),
   },
@@ -39,18 +44,19 @@ const mockProjects: Project[] = [
     id: "2",
     country: "US",
     countryFlag: "🇺🇸",
-    name: "Projet USA",
-    description: "Campagne publicitaire US.",
+    name: "USA Project",
+    description: "US advertising campaign.",
     criteriaMatchCount: 3,
+    validCriteriaCount: 2,
     progressStatus: "in_progress",
     createdAt: new Date().toISOString(),
   },
 ]
 
 const statusLabel: Record<Project["progressStatus"], string> = {
-  error: "Erreur",
-  in_progress: "En cours",
-  ready: "Prêt",
+  error: "Error",
+  in_progress: "In Progress",
+  ready: "Ready",
 }
 const statusColor: Record<Project["progressStatus"], string> = {
   error: "bg-red-100 text-red-700",
@@ -65,6 +71,10 @@ export default function ProjectsPage() {
   const [error, setError] = useState('')
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 25,
+  })
   const { success, error: showError, warning } = useToast()
 
   const fetchProjects = async () => {
@@ -74,14 +84,14 @@ export default function ProjectsPage() {
       
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Erreur lors du chargement des projets')
+        throw new Error(errorData.error || 'Error loading projects')
       }
       
       const data = await response.json()
       setProjects(data.projects || [])
       setError('')
     } catch (err: any) {
-      const errorMessage = err.message || 'Erreur lors du chargement des projets'
+      const errorMessage = err.message || 'Error loading projects'
       setError(errorMessage)
       showError(errorMessage, { duration: 6000 })
     } finally {
@@ -103,14 +113,14 @@ export default function ProjectsPage() {
       
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || `Erreur lors de la suppression du projet "${projectName}"`)
+        throw new Error(errorData.error || `Error deleting project "${projectName}"`)
       }
       
-      success(`Projet "${projectName}" supprimé avec succès`, { duration: 4000 })
+      success(`Project "${projectName}" deleted successfully`, { duration: 4000 })
       await fetchProjects()
     } catch (error: any) {
-      console.error('Erreur lors de la suppression du projet:', error)
-      showError(error.message || `Erreur lors de la suppression du projet "${projectName}"`, { duration: 6000 })
+      console.error('Error deleting project:', error)
+      showError(error.message || `Error deleting project "${projectName}"`, { duration: 6000 })
     } finally {
       setDeletingId(null)
     }
@@ -143,19 +153,19 @@ export default function ProjectsPage() {
       
       // Messages de résultat
       if (successCount > 0 && failedCount === 0) {
-        success(`${successCount} projet(s) supprimé(s) avec succès`, { duration: 4000 })
+        success(`${successCount} project(s) deleted successfully`, { duration: 4000 })
       } else if (successCount > 0 && failedCount > 0) {
-        warning(`${successCount} projet(s) supprimé(s), ${failedCount} échec(s)`, { duration: 5000 })
+        warning(`${successCount} project(s) deleted, ${failedCount} failed`, { duration: 5000 })
       } else {
-        showError(`Échec de la suppression des ${selectedCount} projet(s)`, { duration: 6000 })
+        showError(`Failed to delete ${selectedCount} project(s)`, { duration: 6000 })
       }
       
       // Rafraîchir la liste et réinitialiser la sélection
       await fetchProjects()
       setRowSelection({})
     } catch (error) {
-      console.error('Erreur lors de la suppression des projets:', error)
-      showError('Erreur lors de la suppression des projets sélectionnés', { duration: 6000 })
+      console.error('Error deleting projects:', error)
+      showError('Error deleting selected projects', { duration: 6000 })
     }
   }
 
@@ -168,7 +178,7 @@ export default function ProjectsPage() {
           <Checkbox
             checked={table.getIsAllRowsSelected()}
             onCheckedChange={value => table.toggleAllRowsSelected(!!value)}
-            aria-label="Sélectionner tout"
+            aria-label="Select all"
           />
         </div>
       ),
@@ -178,19 +188,19 @@ export default function ProjectsPage() {
             checked={row.getIsSelected()}
             disabled={!row.getCanSelect()}
             onCheckedChange={value => row.toggleSelected(!!value)}
-            aria-label="Sélectionner la ligne"
+            aria-label="Select row"
           />
         </div>
       ),
       size: 42,
     }),
     columnHelper.accessor("countryFlag", {
-      header: "Pays",
+      header: "Country",
       cell: info => <span className="text-lg">{info.getValue()}</span>,
-      size: 48,
+      size: 80,
     }),
     columnHelper.accessor("name", {
-      header: "Nom du projet",
+      header: "Project Name",
       cell: info => (
         <TooltipProvider>
           <Tooltip>
@@ -211,11 +221,20 @@ export default function ProjectsPage() {
           </Tooltip>
         </TooltipProvider>
       ),
-      size: 1,
+      size: 250,
+    }),
+    columnHelper.accessor("validCriteriaCount", {
+      header: "Valid Criteria",
+      cell: info => (
+        <span className="font-medium text-green-700 ml-4">
+          {info.getValue() || 0}
+        </span>
+      ),
+      size: 110,
     }),
     columnHelper.accessor("createdAt", {
       header: "Date",
-      cell: info => format(new Date(info.getValue()), "dd/MM/yyyy"),
+      cell: info => format(new Date(info.getValue()), "MM/dd/yyyy"),
       size: 1,
     }),
     columnHelper.accessor('enrichmentStatus', {
@@ -227,67 +246,86 @@ export default function ProjectsPage() {
       id: "actions",
       header: "Actions",
       cell: ({ row }) => (
-        <div className="flex space-x-2">
+        <div className="flex gap-2">
+          <Button 
+            size="icon" 
+            variant="outline"
+            onClick={() => router.push(`/projects/${row.original.slug || row.original.id}`)}
+            title="View"
+          >
+            <Eye size={18} />
+          </Button>
           <CreateProjectModal 
             project={row.original}
+            mode="edit"
             onProjectCreated={fetchProjects}
           >
-            <Button variant="outline" size="sm">
-              Éditer
+            <Button 
+              size="icon" 
+              variant="outline"
+              title="Edit"
+            >
+              <Edit size={18} />
             </Button>
           </CreateProjectModal>
           <DeleteConfirmModal
-            title={`Supprimer le projet "${row.original.name}"`}
-            description="Cette action est irréversible. Toutes les données associées à ce projet seront définitivement supprimées."
+            title="Delete Project"
+            description={`Are you sure you want to delete the project "${row.original.name}"? This action cannot be undone.`}
             onConfirm={() => handleDeleteProject(row.original.id, row.original.name)}
             isLoading={deletingId === row.original.id}
           >
             <Button 
-              variant="outline" 
-              size="sm" 
+              size="icon"
+              variant="destructive" 
               disabled={deletingId === row.original.id}
+              title="Delete"
             >
-              {deletingId === row.original.id ? "Suppression..." : "Supprimer"}
+              <Trash2 size={18} />
             </Button>
           </DeleteConfirmModal>
         </div>
       ),
       size: 1,
     }),
-  ], [router])
+  ], [router, handleDeleteProject, fetchProjects, deletingId])
 
   const table = useReactTable({
     data: projects,
     columns,
-    state: { rowSelection },
+    state: { 
+      rowSelection,
+      pagination,
+    },
     onRowSelectionChange: setRowSelection,
+    onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     enableRowSelection: true,
   })
 
   return (
     <div className="w-full px-32 py-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Mes projets</h1>
+        <h1 className="text-2xl font-bold">My Projects</h1>
         <CreateProjectModal onProjectCreated={fetchProjects}>
-          <Button>Nouveau projet</Button>
+          <Button>New Project</Button>
         </CreateProjectModal>
       </div>
-      {loading && <div>Chargement des projets...</div>}
+      {loading && <div>Loading projects...</div>}
       {error && <div className="text-red-600">{error}</div>}
       {!loading && !error && (
         <>
           {/* Sélection groupée */}
           {Object.keys(rowSelection).length > 0 && (
             <DeleteConfirmModal
-              title={`Supprimer ${Object.keys(rowSelection).length} projet(s)`}
-              description={`Cette action supprimera définitivement ${Object.keys(rowSelection).length} projet(s) sélectionné(s). Cette action est irréversible.`}
+              title={`Delete ${Object.keys(rowSelection).length} project(s)`}
+              description={`This action will permanently delete ${Object.keys(rowSelection).length} selected project(s). This action cannot be undone.`}
               onConfirm={handleDeleteSelected}
             >
               <Button variant="destructive" size="sm">
-                Supprimer la sélection ({Object.keys(rowSelection).length})
+                Delete Selection ({Object.keys(rowSelection).length})
               </Button>
             </DeleteConfirmModal>
           )}
@@ -297,10 +335,12 @@ export default function ProjectsPage() {
             <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
               <colgroup>
                 <col style={{ width: '42px' }} />
-                <col style={{ width: '48px' }} />
-                <col style={{ width: '40%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '18%' }} />
+                <col style={{ width: '80px' }} />
+                <col style={{ width: '30%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '15%' }} />
+                <col style={{ width: '140px' }} />
               </colgroup>
               <thead className="bg-muted">
                 {table.getHeaderGroups().map(headerGroup => (
@@ -348,6 +388,12 @@ export default function ProjectsPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination et contrôles */}
+          <Pagination
+            table={table}
+            totalItems={projects.length}
+          />
         </>
       )}
     </div>

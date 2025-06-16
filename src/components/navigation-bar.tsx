@@ -25,11 +25,6 @@ export function NavigationBar() {
         <NavigationMenuList>
           <NavigationMenuItem>
             <NavigationMenuLink asChild>
-              <Link href="/" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-dashboard">Dashboard</Link>
-            </NavigationMenuLink>
-          </NavigationMenuItem>
-          <NavigationMenuItem>
-            <NavigationMenuLink asChild>
               <Link href="/projects" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-projects">Projets</Link>
             </NavigationMenuLink>
           </NavigationMenuItem>
@@ -38,23 +33,11 @@ export function NavigationBar() {
               <Link href="/categories" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-categories">Categories</Link>
             </NavigationMenuLink>
           </NavigationMenuItem>
-          <NavigationMenuItem>
-            <NavigationMenuLink asChild>
-              <Link href="/scoring" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-scoring">Scoring</Link>
-            </NavigationMenuLink>
-          </NavigationMenuItem>
           {/* Lien Admin visible uniquement pour les admins */}
           {isAuthenticated && user?.role === 'admin' && (
             <NavigationMenuItem>
               <NavigationMenuLink asChild>
                 <Link href="/admin" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-admin">Admin</Link>
-              </NavigationMenuLink>
-            </NavigationMenuItem>
-          )}
-          {isAuthenticated && (
-            <NavigationMenuItem>
-              <NavigationMenuLink asChild>
-                <Link href="/profile" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-profile">Profil</Link>
               </NavigationMenuLink>
             </NavigationMenuItem>
           )}

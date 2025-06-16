@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-export async function PUT(req: NextRequest, { params }: { params: { slug: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const { action } = await req.json()
-    const { slug } = params
+    const { slug } = await params
 
     if (!['pause', 'resume', 'cancel'].includes(action)) {
       return NextResponse.json({ error: 'Action invalide' }, { status: 400 })

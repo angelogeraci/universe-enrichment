@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   console.log('🔍 PUT /api/prompts/[id] - DÉBUT')
   
   try {
@@ -53,7 +53,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   console.log('🔍 GET /api/prompts/[id] - DÉBUT')
   
   try {
@@ -90,7 +90,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   console.log('🔍 DELETE /api/prompts/[id] - DÉBUT')
   
   try {

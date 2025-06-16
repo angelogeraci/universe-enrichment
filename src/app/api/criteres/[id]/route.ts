@@ -3,6 +3,70 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { id } = await params
+    const body = await request.json()
+    const { label, category, categoryPath, note } = body
+
+    // Validation des données
+    if (!label || !category || !categoryPath || !Array.isArray(categoryPath)) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    // Récupérer l'utilisateur connecté
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email }
+    })
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    // Vérifier si le critère existe et appartient à l'utilisateur
+    const critere = await prisma.critere.findUnique({
+      where: { id },
+      include: { project: true }
+    })
+
+    if (!critere) {
+      return NextResponse.json({ error: 'Criterion not found' }, { status: 404 })
+    }
+
+    if (critere.project.ownerId !== user.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
+
+    // Mettre à jour le critère
+    const updatedCritere = await prisma.critere.update({
+      where: { id },
+      data: {
+        label,
+        category,
+        categoryPath,
+        note: note || null,
+        updatedAt: new Date()
+      }
+    })
+
+    return NextResponse.json({ critere: updatedCritere })
+  } catch (error) {
+    console.error('Error updating criterion:', error)
+    return NextResponse.json(
+      { error: 'Error updating criterion' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
