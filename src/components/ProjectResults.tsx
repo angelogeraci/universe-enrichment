@@ -275,6 +275,11 @@ export function ProjectResults ({
   // États pour les filtres avancés
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [scoreRange, setScoreRange] = useState({ min: 0, max: 100 })
+  const [relevanceFilter, setRelevanceFilter] = useState([
+    { value: 'relevant', label: 'Pertinents' },
+    { value: 'nonrelevant', label: 'Non pertinents' },
+    { value: 'nosuggestion', label: 'Sans suggestion' },
+  ])
 
   // Debug: Log des changements d'état
   useEffect(() => {
@@ -299,11 +304,6 @@ export function ProjectResults ({
     { value: 'nonrelevant', label: 'Non pertinents' },
     { value: 'nosuggestion', label: 'Sans suggestion' },
   ]
-  const [relevanceFilter, setRelevanceFilter] = useState([
-    relevanceOptions[0],
-    relevanceOptions[1],
-    relevanceOptions[2],
-  ])
 
   // Ajout de l'option 1000 résultats par page
   const resultsPerPageOptions = [25, 50, 100, 200, 500, 1000]
@@ -520,7 +520,7 @@ export function ProjectResults ({
       }
     })
     return data
-  }, [criteriaData, search, sortBy, sortDir, relevanceFilter, relevanceThreshold, scoreRange])
+  }, [criteriaData, search, sortBy, sortDir, relevanceFilter, scoreRange])
 
   const toggleSelect = (id: string) => {
     setSelected(sel => sel.includes(id) ? sel.filter(s => s !== id) : [...sel, id])
@@ -900,9 +900,9 @@ export function ProjectResults ({
                     <div style={{ minWidth: 280 }}>
                       <Select
                         isMulti
-                        options={relevanceOptions}
+                        options={relevanceFilter}
                         value={relevanceFilter}
-                        onChange={opts => setRelevanceFilter(opts as typeof relevanceOptions)}
+                        onChange={opts => setRelevanceFilter(opts as typeof relevanceFilter)}
                         closeMenuOnSelect={false}
                         hideSelectedOptions={false}
                         placeholder="Sélectionner les types..."
@@ -1307,9 +1307,9 @@ export function ProjectResults ({
               <div style={{ minWidth: 220 }}>
                 <Select
                   isMulti
-                  options={relevanceOptions}
+                  options={relevanceFilter}
                   value={relevanceFilter}
-                  onChange={opts => setRelevanceFilter(opts as typeof relevanceOptions)}
+                  onChange={opts => setRelevanceFilter(opts as typeof relevanceFilter)}
                   closeMenuOnSelect={false}
                   hideSelectedOptions={false}
                   placeholder="Filtrer..."
