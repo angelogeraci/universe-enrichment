@@ -275,10 +275,15 @@ export function ProjectResults ({
   // États pour les filtres avancés
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [scoreRange, setScoreRange] = useState({ min: 0, max: 100 })
-  const [relevanceFilter, setRelevanceFilter] = useState([
+  const [relevanceOptions] = useState([
     { value: 'relevant', label: 'Pertinents' },
     { value: 'nonrelevant', label: 'Non pertinents' },
     { value: 'nosuggestion', label: 'Sans suggestion' },
+  ])
+  const [relevanceFilter, setRelevanceFilter] = useState([
+    relevanceOptions[0],
+    relevanceOptions[1],
+    relevanceOptions[2],
   ])
 
   // Debug: Log des changements d'état
@@ -297,13 +302,6 @@ export function ProjectResults ({
   useEffect(() => {
     console.log('🔑 STATE CHANGE - updateKey:', updateKey)
   }, [updateKey])
-
-  // Options du filtre pertinence
-  const relevanceOptions = [
-    { value: 'relevant', label: 'Pertinents' },
-    { value: 'nonrelevant', label: 'Non pertinents' },
-    { value: 'nosuggestion', label: 'Sans suggestion' },
-  ]
 
   // Ajout de l'option 1000 résultats par page
   const resultsPerPageOptions = [25, 50, 100, 200, 500, 1000]
