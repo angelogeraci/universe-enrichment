@@ -208,7 +208,7 @@ export default function ProjectsPage() {
               <button
                 className="text-blue-600 hover:underline font-medium text-left w-full truncate min-w-[120px] pl-0"
                 style={{ flex: 1, minWidth: 0 }}
-                onClick={() => router.push(`/projects/${info.row.original.slug || info.row.original.id}`)}
+                onClick={() => router.push(`/app/projects/${info.row.original.slug || info.row.original.id}`)}
                 tabIndex={0}
                 type="button"
               >

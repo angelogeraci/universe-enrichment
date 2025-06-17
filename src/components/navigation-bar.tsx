@@ -25,19 +25,19 @@ export function NavigationBar() {
         <NavigationMenuList>
           <NavigationMenuItem>
             <NavigationMenuLink asChild>
-              <Link href="/projects" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-projects">Projets</Link>
+              <Link href="/app/projects" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-projects">Projets</Link>
             </NavigationMenuLink>
           </NavigationMenuItem>
           <NavigationMenuItem>
             <NavigationMenuLink asChild>
-              <Link href="/categories" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-categories">Categories</Link>
+              <Link href="/app/categories" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-categories">Categories</Link>
             </NavigationMenuLink>
           </NavigationMenuItem>
           {/* Lien Admin visible uniquement pour les admins */}
           {isAuthenticated && user?.role === 'admin' && (
             <NavigationMenuItem>
               <NavigationMenuLink asChild>
-                <Link href="/admin" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-admin">Admin</Link>
+                <Link href="/app/admin" className="px-4 py-2 rounded hover:bg-accent transition-colors" data-cy="nav-admin">Admin</Link>
               </NavigationMenuLink>
             </NavigationMenuItem>
           )}

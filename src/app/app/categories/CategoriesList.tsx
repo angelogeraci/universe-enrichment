@@ -140,7 +140,7 @@ const CategoriesList = forwardRef(function CategoriesList(_, ref) {
       cell: info => (
         <button
           className="text-blue-600 hover:underline font-medium text-left w-full"
-          onClick={() => router.push(`/categories/${info.row.original.slug}/edit`)}
+          onClick={() => router.push(`/app/categories/${info.row.original.slug}/edit`)}
         >
           {info.getValue()}
         </button>

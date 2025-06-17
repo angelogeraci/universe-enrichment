@@ -49,14 +49,14 @@ export function AppSidebar() {
           <SidebarMenu className="mt-2">
             <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-                <Link href="/projects" data-cy="sidebar-projects">
+                <Link href="/app/projects" data-cy="sidebar-projects">
                   <Folder className="mr-3 h-5 w-5" /> Projects
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-                <Link href="/categories" data-cy="sidebar-categories">
+                <Link href="/app/categories" data-cy="sidebar-categories">
                   <Database className="mr-3 h-5 w-5" /> Categories
                 </Link>
               </SidebarMenuButton>

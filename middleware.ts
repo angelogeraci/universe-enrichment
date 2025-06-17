@@ -25,9 +25,9 @@ export async function middleware (req: NextRequest) {
     loginUrl.searchParams.set('callbackUrl', req.nextUrl.pathname)
     return NextResponse.redirect(loginUrl)
   }
-  // Protection spécifique pour /admin
-  if (pathname.startsWith('/admin') && token.role !== 'admin') {
-    return NextResponse.redirect(new URL('/projects', req.url))
+  // Protection spécifique pour /admin et /app/admin
+  if ((pathname.startsWith('/admin') || pathname.startsWith('/app/admin')) && token.role !== 'admin') {
+    return NextResponse.redirect(new URL('/app/projects', req.url))
   }
   return NextResponse.next()
 }

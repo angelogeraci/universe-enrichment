@@ -287,11 +287,11 @@ export default function CreateProjectPage() {
       } catch (e) {
         console.error('Erreur lors du chargement des données du projet:', e)
         showError('Erreur lors du chargement des données du projet')
-        router.push('/projects')
+        router.push('/app/projects')
       }
     } else {
       warning('Aucune donnée de projet trouvée')
-      router.push('/projects')
+      router.push('/app/projects')
     }
   }, [])
 
@@ -352,7 +352,7 @@ export default function CreateProjectPage() {
       localStorage.removeItem('newProjectData')
       
       // Rediriger vers la liste des projets
-      router.push('/projects')
+      router.push('/app/projects')
       
     } catch (err: any) {
       const errorMessage = 'Erreur réseau ou serveur'
@@ -376,7 +376,7 @@ export default function CreateProjectPage() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => router.push('/projects')}
+          onClick={() => router.push('/app/projects')}
           className="flex items-center gap-2"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -479,7 +479,7 @@ export default function CreateProjectPage() {
                     type="button"
                     variant="link"
                     className="p-0 h-auto text-xs"
-                    onClick={() => router.push('/categories')}
+                    onClick={() => router.push('/app/categories')}
                   >
                     Créer une liste de catégories
                   </Button>
@@ -493,7 +493,7 @@ export default function CreateProjectPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => router.push('/projects')}
+              onClick={() => router.push('/app/projects')}
               className="flex-1"
             >
               Annuler

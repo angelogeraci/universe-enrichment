@@ -50,7 +50,7 @@ export default function LoginPage() {
           await new Promise(r => setTimeout(r, 150));
           tries++;
         }
-        router.push("/projects");
+        router.push("/app/projects");
       }
     } catch (err: any) {
       console.error("Login error:", err);
