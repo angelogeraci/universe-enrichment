@@ -124,7 +124,7 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
   }, [])
 
   if (totalCategories === 0) {
-    return <div className="py-12 text-center text-destructive">Aucune catégorie trouvée pour ce projet. Impossible de générer des critères IA.</div>
+    return <div className="py-12 text-center text-destructive">No categories found for this project. Unable to generate AI criteria.</div>
   }
   
   const fetcher = (url: string) => fetch(url).then(res => res.json())
@@ -166,13 +166,13 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
   // Alerte si incohérence entre la progression et les données reçues
   if ((progressData?.progress?.current && progressData.progress.current > 0) || (progressData?.progress?.total && progressData.progress.total > 0)) {
     if ((!data || data.criteres.length === 0) && (['done', 'processing', 'paused'].includes(currentStatus))) {
-      return <div className="py-12 text-center text-destructive">Incohérence détectée : la progression indique {progressData?.progress?.current}/{progressData?.progress?.total} critères, mais aucune donnée n'a été reçue côté client.<br/>Vérifie la route API /api/projects/slug/{slug}/criteres et le mapping côté SWR.</div>
+      return <div className="py-12 text-center text-destructive">Inconsistency detected: progress indicates {progressData?.progress?.current}/{progressData?.progress?.total} criteria, but no data was received on the client side.<br/>Check the API route /api/projects/slug/{slug}/criteres and SWR mapping.</div>
     }
   }
 
   // Gestion d'erreur structurelle
   if (currentStatus === 'error') {
-    return <div className="py-12 text-center text-destructive">Erreur lors de l'enrichissement IA. Veuillez réessayer ou contacter le support.</div>
+    return <div className="py-12 text-center text-destructive">Error during AI enrichment. Please try again or contact support.</div>
   }
 
   // Afficher le skeleton pendant le chargement initial
@@ -181,7 +181,7 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
   }
 
   if (currentStatus === 'done' && !isLoading && (!data || !Array.isArray(data.criteres))) {
-    return <div className="py-12 text-center text-destructive">Erreur : Données IA manquantes ou mal structurées. Vérifie la génération côté backend/OpenAI.</div>
+    return <div className="py-12 text-center text-destructive">Error: Missing or malformed AI data. Check backend/OpenAI generation.</div>
   }
   
   // Utiliser les métriques de la progression si disponibles, sinon calculer depuis les critères

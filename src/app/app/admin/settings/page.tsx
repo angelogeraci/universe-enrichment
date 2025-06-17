@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 const DEFAULTS = {
   facebookBatchSize: 100,
   facebookPauseMs: 5000,
-  facebookRelevanceScoreThreshold: 30 // en pourcent
+  facebookRelevanceScoreThreshold: 30 // in percentage
 }
 
 export default function AdminSettingsPage() {
@@ -18,7 +18,7 @@ export default function AdminSettingsPage() {
   const [success, setSuccess] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Charger les settings au mount
+  // Load settings on mount
   useEffect(() => {
     setLoading(true)
     fetch('/api/admin/settings')
@@ -26,11 +26,11 @@ export default function AdminSettingsPage() {
       .then(data => {
         setFacebookBatchSize(Number(data.facebookBatchSize ?? DEFAULTS.facebookBatchSize))
         setFacebookPauseMs(Number(data.facebookPauseMs ?? DEFAULTS.facebookPauseMs))
-        // Conversion décimal -> pourcent
+        // Convert decimal -> percentage
         setFacebookRelevanceScoreThreshold(Number(data.facebookRelevanceScoreThreshold ?? (DEFAULTS.facebookRelevanceScoreThreshold / 100)) * 100)
         setError(null)
       })
-      .catch(() => setError('Erreur de chargement des paramètres'))
+      .catch(() => setError('Error loading settings'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -46,13 +46,13 @@ export default function AdminSettingsPage() {
         body: JSON.stringify({
           facebookBatchSize,
           facebookPauseMs,
-          facebookRelevanceScoreThreshold: facebookRelevanceScoreThreshold / 100 // conversion pourcent -> décimal
+          facebookRelevanceScoreThreshold: facebookRelevanceScoreThreshold / 100 // convert percentage -> decimal
         })
       })
-      if (!res.ok) throw new Error('Erreur lors de la sauvegarde')
-      setSuccess('Paramètres enregistrés !')
+      if (!res.ok) throw new Error('Error saving settings')
+      setSuccess('Settings saved!')
     } catch (err) {
-      setError('Erreur lors de la sauvegarde')
+      setError('Error saving settings')
     } finally {
       setSaving(false)
     }
@@ -60,13 +60,13 @@ export default function AdminSettingsPage() {
 
   return (
     <div className="max-w-xl mx-auto mt-10 p-8 bg-white rounded-lg border shadow">
-      <h1 className="text-2xl font-bold mb-6">Paramètres de l'application</h1>
+      <h1 className="text-2xl font-bold mb-6">Application Settings</h1>
       {loading ? (
-        <div>Chargement…</div>
+        <div>Loading...</div>
       ) : (
         <form onSubmit={handleSave} className="space-y-6">
           <div>
-            <label className="block font-medium mb-1">Nombre de requêtes Facebook avant pause</label>
+            <label className="block font-medium mb-1">Facebook requests before pause</label>
             <Input
               type="number"
               min={1}
@@ -76,7 +76,7 @@ export default function AdminSettingsPage() {
             />
           </div>
           <div>
-            <label className="block font-medium mb-1">Durée de la pause (ms)</label>
+            <label className="block font-medium mb-1">Pause duration (ms)</label>
             <Input
               type="number"
               min={0}
@@ -87,7 +87,7 @@ export default function AdminSettingsPage() {
             />
           </div>
           <div>
-            <label className="block font-medium mb-1">Score de pertinence minimum (%)</label>
+            <label className="block font-medium mb-1">Minimum relevance score (%)</label>
             <Input
               type="number"
               min={0}
@@ -101,7 +101,7 @@ export default function AdminSettingsPage() {
           {error && <div className="text-red-600 text-sm">{error}</div>}
           {success && <div className="text-green-600 text-sm">{success}</div>}
           <Button type="submit" disabled={saving}>
-            {saving ? 'Enregistrement...' : 'Enregistrer'}
+            {saving ? 'Saving...' : 'Save'}
           </Button>
         </form>
       )}

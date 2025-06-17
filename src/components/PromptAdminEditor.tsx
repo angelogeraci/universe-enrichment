@@ -246,20 +246,20 @@ export default function PromptAdminEditor () {
               disabled={saving === prompt.id}
               className="w-full"
             >
-              {saving === prompt.id ? 'Sauvegarde...' : `Enregistrer ${getSearchTypeLabel(prompt.searchType || '')}`}
+              {saving === prompt.id ? 'Saving...' : `Save ${getSearchTypeLabel(prompt.searchType || '')}`}
             </Button>
           </div>
         </div>
       ))}
 
-      {/* Zone Format de Sortie - Non Éditable */}
+      {/* Output Format Zone - Non-Editable */}
       <div className="border-t pt-6">
         <div className="bg-gray-50 p-4 rounded-lg">
           <h3 className="font-semibold text-lg mb-3 text-gray-800">
-            📋 Format de Sortie OpenAI (Non Modifiable)
+            📋 OpenAI Output Format (Non-Modifiable)
           </h3>
           <p className="text-sm text-gray-600 mb-3">
-            Cette instruction est automatiquement ajoutée à vos prompts pour assurer la cohérence du format de réponse:
+            This instruction is automatically added to your prompts to ensure response format consistency:
           </p>
           <Textarea 
             value={OUTPUT_FORMAT_INSTRUCTION}
@@ -269,8 +269,8 @@ export default function PromptAdminEditor () {
           />
           <div className="mt-3 p-2 bg-blue-50 rounded border-l-4 border-blue-400">
             <p className="text-sm text-blue-800">
-              <strong>ℹ️ Information:</strong> Cette partie est automatiquement combinée avec vos templates 
-              lors de l'envoi à OpenAI pour garantir un format de réponse cohérent.
+              <strong>ℹ️ Information:</strong> This part is automatically combined with your templates 
+              when sending to OpenAI to ensure a consistent response format.
             </p>
           </div>
         </div>

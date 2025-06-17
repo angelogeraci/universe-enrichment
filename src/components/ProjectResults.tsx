@@ -842,7 +842,7 @@ export function ProjectResults ({
               <div className="flex items-center gap-4">
                 <Input
                   type="text"
-                  placeholder="Rechercher par nom ou catégorie..."
+                  placeholder="Search by name or category..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="w-64"
@@ -853,10 +853,10 @@ export function ProjectResults ({
                   onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                 >
                   <Filter size={16} className="mr-2" />
-                  Filtres {showAdvancedFilters && <X size={14} className="ml-1" />}
+                  Filters {showAdvancedFilters && <X size={14} className="ml-1" />}
                 </Button>
                 <Button size="sm" variant="default" onClick={handleExportXLSX}>
-                  Exporter en XLSX
+                  Export XLSX
                 </Button>
                 {selected.length > 0 && (
                   <>
@@ -876,7 +876,7 @@ export function ProjectResults ({
                       onConfirm={handleDeleteSelected}
                     >
                       <Button size="sm" variant="destructive">
-                        <Trash2 size={16} className="mr-2" /> Supprimer ({selected.length})
+                        <Trash2 size={16} className="mr-2" /> Delete ({selected.length})
                       </Button>
                     </BulkActionModal>
                   </>
@@ -890,11 +890,11 @@ export function ProjectResults ({
             {/* Panneau de filtres avancés */}
             {showAdvancedFilters && (
               <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                <h3 className="text-sm font-medium mb-3 text-gray-700">Filtres avancés</h3>
+                <h3 className="text-sm font-medium mb-3 text-gray-700">Advanced Filters</h3>
                 <div className="space-y-4">
                   {/* Filtre par pertinence */}
                   <div className="flex items-center gap-4">
-                    <label className="text-sm text-gray-600 min-w-[80px]">Pertinence :</label>
+                    <label className="text-sm text-gray-600 min-w-[80px]">Relevance:</label>
                     <div style={{ minWidth: 280 }}>
                       <Select
                         isMulti
@@ -903,7 +903,7 @@ export function ProjectResults ({
                         onChange={opts => setRelevanceFilter(opts as typeof relevanceFilter)}
                         closeMenuOnSelect={false}
                         hideSelectedOptions={false}
-                        placeholder="Sélectionner les types..."
+                        placeholder="Select types..."
                         classNamePrefix="relevance-select"
                         styles={{
                           control: base => ({ ...base, minHeight: 32, borderRadius: 6, fontSize: '14px' }),
@@ -1113,7 +1113,7 @@ export function ProjectResults ({
                                             Score: {suggestion.similarityScore}% • 
                                             Audience: {formatAudience(suggestion.audience)} • 
                                             Type: interest
-                                            {isLowQuality && <span className="text-red-600 font-medium"> • NON PERTINENTE</span>}
+                                            {isLowQuality && <span className="text-red-600 font-medium"> • NOT RELEVANT</span>}
                                           </div>
                                         </div>
                                         <div className="flex items-center gap-1 ml-2">
@@ -1128,7 +1128,7 @@ export function ProjectResults ({
                             )}
                           </div>
                         ) : (
-                          <span className="text-muted-foreground text-sm">Aucune suggestion</span>
+                          <span className="text-muted-foreground text-sm">No suggestion</span>
                         )}
                       </td>
 
@@ -1152,7 +1152,7 @@ export function ProjectResults ({
                               const currentSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
                               if (!currentSuggestion) return null
                               const score = currentSuggestion.similarityScore
-                              return <div className={`w-2 h-2 rounded-full ${score >= relevanceThreshold ? 'bg-green-500' : 'bg-red-500'}`} title={score >= relevanceThreshold ? 'Pertinent' : 'Non pertinent'}></div>
+                              return <div className={`w-2 h-2 rounded-full ${score >= relevanceThreshold ? 'bg-green-500' : 'bg-red-500'}`} title={score >= relevanceThreshold ? 'Relevant' : 'Not relevant'}></div>
                             })()}
                           </div>
                         ) : (
@@ -1182,15 +1182,15 @@ export function ProjectResults ({
                             variant="outline"
                             disabled={loadingIndividualUpdate.has(critere.id)}
                             onClick={() => handleIndividualUpdate(critere)}
-                            title="Rafraîchir les suggestions Facebook"
+                            title="Refresh Facebook suggestions"
                           >
                             <RefreshCw className={loadingIndividualUpdate.has(critere.id) ? 'animate-spin' : ''} size={18} />
                           </Button>
-                          <Button size="icon" variant="outline" title="Éditer"><Edit size={18} /></Button>
+                          <Button size="icon" variant="outline" title="Edit"><Edit size={18} /></Button>
                           <Button 
                             size="icon" 
                             variant="destructive" 
-                            title="Supprimer" 
+                            title="Delete" 
                             onClick={() => handleDeleteCritere(critere.id)}
                           >
                             <Trash2 size={18} />
@@ -1512,7 +1512,7 @@ export function ProjectResults ({
                                           Score: {suggestion.similarityScore}% • 
                                           Audience: {formatAudience(suggestion.audience)} • 
                                           Type: interest
-                                          {isLowQuality && <span className="text-red-600 font-medium"> • NON PERTINENTE</span>}
+                                          {isLowQuality && <span className="text-red-600 font-medium"> • NOT RELEVANT</span>}
                                         </div>
                                       </div>
                                       <div className="flex items-center gap-1 ml-2">
@@ -1527,7 +1527,7 @@ export function ProjectResults ({
                           )}
                         </div>
                       ) : (
-                        <span className="text-muted-foreground text-sm">Aucune suggestion</span>
+                        <span className="text-muted-foreground text-sm">No suggestion</span>
                       )}
                     </td>
 
@@ -1551,7 +1551,7 @@ export function ProjectResults ({
                             const currentSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
                             if (!currentSuggestion) return null
                             const score = currentSuggestion.similarityScore
-                            return <div className={`w-2 h-2 rounded-full ${score >= relevanceThreshold ? 'bg-green-500' : 'bg-red-500'}`} title={score >= relevanceThreshold ? 'Pertinent' : 'Non pertinent'}></div>
+                            return <div className={`w-2 h-2 rounded-full ${score >= relevanceThreshold ? 'bg-green-500' : 'bg-red-500'}`} title={score >= relevanceThreshold ? 'Relevant' : 'Not relevant'}></div>
                           })()}
                         </div>
                       ) : (
@@ -1581,7 +1581,7 @@ export function ProjectResults ({
                           variant="outline"
                           disabled={loadingIndividualUpdate.has(critere.id)}
                           onClick={() => handleIndividualUpdate(critere)}
-                          title="Rafraîchir les suggestions Facebook"
+                          title="Refresh Facebook suggestions"
                         >
                           <RefreshCw className={loadingIndividualUpdate.has(critere.id) ? 'animate-spin' : ''} size={18} />
                         </Button>

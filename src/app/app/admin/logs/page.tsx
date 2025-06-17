@@ -35,12 +35,12 @@ export default function AdminLogsPage() {
       setLoading(true)
       const res = await fetch('/api/admin/logs')
       if (!res.ok) {
-        throw new Error('Erreur lors du chargement des logs')
+        throw new Error('Error loading logs')
       }
       const data = await res.json()
       setLogs(data.logs || [])
     } catch (error: any) {
-      showError(error.message || 'Erreur lors du chargement des logs', { duration: 5000 })
+      showError(error.message || 'Error loading logs', { duration: 5000 })
     } finally {
       setLoading(false)
     }
@@ -53,13 +53,13 @@ export default function AdminLogsPage() {
         method: 'DELETE'
       })
       if (!res.ok) {
-        throw new Error('Erreur lors de la suppression des logs')
+        throw new Error('Error deleting logs')
       }
       const data = await res.json()
-      success(data.message || 'Logs supprimés avec succès', { duration: 3000 })
+      success(data.message || 'Logs deleted successfully', { duration: 3000 })
       setLogs([])
     } catch (error: any) {
-      showError(error.message || 'Erreur lors de la suppression des logs', { duration: 5000 })
+      showError(error.message || 'Error deleting logs', { duration: 5000 })
     } finally {
       setDeleting(false)
     }
@@ -80,7 +80,7 @@ export default function AdminLogsPage() {
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('fr-FR', {
+    return new Date(dateString).toLocaleString('en-US', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -94,7 +94,7 @@ export default function AdminLogsPage() {
     return (
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">Chargement des logs...</div>
+          <div className="text-center">Loading logs...</div>
         </div>
       </div>
     )
@@ -107,9 +107,9 @@ export default function AdminLogsPage() {
           <div className="px-6 py-4 border-b border-gray-200">
             <div className="flex justify-between items-center">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">🔍 Logs OpenAI</h1>
+                <h1 className="text-2xl font-bold text-gray-900">🔍 OpenAI Logs</h1>
                 <p className="text-gray-600 mt-1">
-                  Logs des requêtes et réponses d'enrichissement OpenAI
+                  Logs of OpenAI enrichment requests and responses
                 </p>
               </div>
               <div className="flex space-x-2">
@@ -118,14 +118,14 @@ export default function AdminLogsPage() {
                   variant="outline"
                   disabled={loading}
                 >
-                  🔄 Actualiser
+                  🔄 Refresh
                 </Button>
                 <Button 
                   onClick={clearLogs}
                   variant="destructive"
                   disabled={deleting || logs.length === 0}
                 >
-                  {deleting ? 'Suppression...' : '🗑️ Supprimer'}
+                  {deleting ? 'Deleting...' : '🗑️ Delete'}
                 </Button>
               </div>
             </div>
@@ -135,10 +135,10 @@ export default function AdminLogsPage() {
             {logs.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-gray-500 text-lg">
-                  📝 Aucun log disponible
+                  📝 No logs available
                 </div>
                 <p className="text-gray-400 mt-2">
-                  Les logs apparaîtront ici après l'exécution d'un enrichissement
+                  Logs will appear here after running an enrichment
                 </p>
               </div>
             ) : (
@@ -160,16 +160,16 @@ export default function AdminLogsPage() {
                         </div>
                       </div>
                       <span className={getStatusBadge(log.responseStatus)}>
-                        {log.responseStatus === 'success' ? '✅ Succès' : 
-                         log.responseStatus === 'error' ? '❌ Erreur' : 
-                         '⏳ En cours'}
+                        {log.responseStatus === 'success' ? '✅ Success' : 
+                         log.responseStatus === 'error' ? '❌ Error' : 
+                         '⏳ Processing'}
                       </span>
                     </div>
 
                     {/* Prompt envoyé */}
                     <div className="mb-6">
                       <h4 className="font-semibold text-gray-900 mb-2">
-                        📤 Prompt envoyé à OpenAI
+                        📤 Prompt sent to OpenAI
                       </h4>
                       <Textarea
                         value={log.promptSent}
@@ -182,7 +182,7 @@ export default function AdminLogsPage() {
                     {/* Réponse reçue */}
                     <div>
                       <h4 className="font-semibold text-gray-900 mb-2">
-                        📥 Réponse brute d'OpenAI
+                        📥 Raw OpenAI response
                       </h4>
                       <Textarea
                         value={log.responseRaw}
@@ -198,25 +198,25 @@ export default function AdminLogsPage() {
 
                     {/* Informations additionnelles */}
                     <div className="mt-4 p-4 bg-white rounded border border-gray-200">
-                      <h5 className="font-medium text-gray-900 mb-2">ℹ️ Informations techniques</h5>
+                      <h5 className="font-medium text-gray-900 mb-2">ℹ️ Technical information</h5>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                         <div>
-                          <span className="text-gray-600">ID Projet:</span>
+                          <span className="text-gray-600">Project ID:</span>
                           <br />
                           <code className="text-xs bg-gray-100 px-1 rounded">{log.projectId}</code>
                         </div>
                         <div>
-                          <span className="text-gray-600">Type de recherche:</span>
+                          <span className="text-gray-600">Search type:</span>
                           <br />
                           <span className="font-medium">{log.searchType}</span>
                         </div>
                         <div>
-                          <span className="text-gray-600">Modèle utilisé:</span>
+                          <span className="text-gray-600">Model used:</span>
                           <br />
                           <span className="font-medium">{log.model}</span>
                         </div>
                         <div>
-                          <span className="text-gray-600">Temps de traitement:</span>
+                          <span className="text-gray-600">Processing time:</span>
                           <br />
                           <span className="font-medium">{log.processingTime}ms</span>
                         </div>
