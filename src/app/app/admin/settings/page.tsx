@@ -1,110 +1,106 @@
 'use client'
-import React, { useState, useEffect } from 'react'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 
-const DEFAULTS = {
-  facebookBatchSize: 100,
-  facebookPauseMs: 5000,
-  facebookRelevanceScoreThreshold: 30 // in percentage
+import { useEffect, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { Badge } from '@/components/ui/badge'
+
+interface AppSettings {
+  facebookBatchSize: string
+  facebookPauseMs: string
+  facebookRelevanceScoreThreshold: string
 }
 
 export default function AdminSettingsPage() {
-  const [facebookBatchSize, setFacebookBatchSize] = useState<number>(DEFAULTS.facebookBatchSize)
-  const [facebookPauseMs, setFacebookPauseMs] = useState<number>(DEFAULTS.facebookPauseMs)
-  const [facebookRelevanceScoreThreshold, setFacebookRelevanceScoreThreshold] = useState<number>(DEFAULTS.facebookRelevanceScoreThreshold)
+  const [settings, setSettings] = useState<AppSettings>({
+    facebookBatchSize: '',
+    facebookPauseMs: '',
+    facebookRelevanceScoreThreshold: ''
+  })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [success, setSuccess] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [hasChanges, setHasChanges] = useState(false)
 
-  // Load settings on mount
-  useEffect(() => {
+  const fetchSettings = async () => {
     setLoading(true)
-    fetch('/api/admin/settings')
-      .then(res => res.json())
-      .then(data => {
-        setFacebookBatchSize(Number(data.facebookBatchSize ?? DEFAULTS.facebookBatchSize))
-        setFacebookPauseMs(Number(data.facebookPauseMs ?? DEFAULTS.facebookPauseMs))
-        // Convert decimal -> percentage
-        setFacebookRelevanceScoreThreshold(Number(data.facebookRelevanceScoreThreshold ?? (DEFAULTS.facebookRelevanceScoreThreshold / 100)) * 100)
-        setError(null)
-      })
-      .catch(() => setError('Error loading settings'))
-      .finally(() => setLoading(false))
-  }, [])
+    try {
+      const res = await fetch('/api/admin/settings')
+      if (res.ok) {
+        const data = await res.json()
+        setSettings(data)
+      }
+    } catch (e) {
+      // ignore
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const saveSettings = async () => {
     setSaving(true)
-    setSuccess(null)
-    setError(null)
     try {
       const res = await fetch('/api/admin/settings', {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          facebookBatchSize,
-          facebookPauseMs,
-          facebookRelevanceScoreThreshold: facebookRelevanceScoreThreshold / 100 // convert percentage -> decimal
-        })
+        body: JSON.stringify(settings)
       })
-      if (!res.ok) throw new Error('Error saving settings')
-      setSuccess('Settings saved!')
-    } catch (err) {
-      setError('Error saving settings')
+      if (res.ok) {
+        setHasChanges(false)
+      }
+    } catch (e) {
+      // ignore
     } finally {
       setSaving(false)
     }
   }
 
+  const handleChange = (key: keyof AppSettings, value: string) => {
+    setSettings(prev => ({ ...prev, [key]: value }))
+    setHasChanges(true)
+  }
+
+  useEffect(() => { fetchSettings() }, [])
+
+  if (loading) {
+    return <div className="w-full px-32 py-6">Chargement...</div>
+  }
+
   return (
-    <div className="max-w-xl mx-auto mt-10 p-8 bg-white rounded-lg border shadow">
-      <h1 className="text-2xl font-bold mb-6">Application Settings</h1>
-      {loading ? (
-        <div>Loading...</div>
-      ) : (
-        <form onSubmit={handleSave} className="space-y-6">
-          <div>
-            <label className="block font-medium mb-1">Facebook requests before pause</label>
-            <Input
-              type="number"
-              min={1}
-              value={facebookBatchSize}
-              onChange={e => setFacebookBatchSize(Number(e.target.value))}
-              required
-            />
-          </div>
-          <div>
-            <label className="block font-medium mb-1">Pause duration (ms)</label>
-            <Input
-              type="number"
-              min={0}
-              step={100}
-              value={facebookPauseMs}
-              onChange={e => setFacebookPauseMs(Number(e.target.value))}
-              required
-            />
-          </div>
-          <div>
-            <label className="block font-medium mb-1">Minimum relevance score (%)</label>
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              step={1}
-              value={facebookRelevanceScoreThreshold}
-              onChange={e => setFacebookRelevanceScoreThreshold(Number(e.target.value))}
-              required
-            />
-          </div>
-          {error && <div className="text-red-600 text-sm">{error}</div>}
-          {success && <div className="text-green-600 text-sm">{success}</div>}
-          <Button type="submit" disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
+    <div className="w-full px-32 py-6">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Paramètres de l'application</h1>
+        <div className="flex gap-2">
+          <Button onClick={saveSettings} disabled={!hasChanges || saving}>
+            {saving ? 'Sauvegarde...' : 'Sauvegarder'}
           </Button>
-        </form>
-      )}
+        </div>
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>API Facebook</CardTitle>
+          <CardDescription>Configuration pour l'enrichissement Facebook</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="facebookBatchSize">Batch Size</Label>
+              <Input id="facebookBatchSize" type="number" value={settings.facebookBatchSize} onChange={e => handleChange('facebookBatchSize', e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="facebookPauseMs">Pause (ms)</Label>
+              <Input id="facebookPauseMs" type="number" value={settings.facebookPauseMs} onChange={e => handleChange('facebookPauseMs', e.target.value)} />
+            </div>
+          </div>
+          <Separator />
+          <div className="space-y-2">
+            <Label htmlFor="facebookRelevanceScoreThreshold">Seuil de pertinence</Label>
+            <Input id="facebookRelevanceScoreThreshold" type="number" step="0.1" min="0" max="1" value={settings.facebookRelevanceScoreThreshold} onChange={e => handleChange('facebookRelevanceScoreThreshold', e.target.value)} />
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
-} 
+}

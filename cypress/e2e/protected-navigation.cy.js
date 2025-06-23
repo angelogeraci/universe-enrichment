@@ -1,10 +1,8 @@
 describe('Navigation entre pages protégées', () => {
   const protectedRoutes = [
-    '/dashboard',
-    '/projects',
-    '/enrichment',
-    '/scoring',
-    '/admin',
+    '/app/projects',
+    '/app/categories',
+    '/app/admin',
   ]
 
   beforeEach(() => {

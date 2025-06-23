@@ -609,6 +609,76 @@ export function ProjectResults ({
     XLSX.writeFile(wb, 'export-suggestions.xlsx')
   }
 
+  // Nouvelle fonction d'export complet avec toutes les colonnes
+  const handleExportComplete = () => {
+    const header = [
+      'Nom',
+      'Catégorie',
+      'Suggestion Facebook Sélectionnée',
+      'Score de Relevance',
+      'Audience',
+      'Statut',
+      'Toutes les Suggestions',
+      'Path Complet'
+    ]
+    
+    const rows = filtered.map(critere => {
+      const realSuggestions = getRealSuggestions(critere.suggestions || [])
+      const selectedSuggestion = realSuggestions.find(s => s.isSelectedByUser) || 
+                                realSuggestions.find(s => s.isBestMatch) || 
+                                realSuggestions[0]
+      
+      // Trouver la catégorie correspondante
+      const cat = categoriesData?.find(cat => {
+        const criterePath = Array.isArray(critere.categoryPath) ? critere.categoryPath.join(' -- ') : critere.categoryPath
+        const catPath = getCategoryPathString(cat)
+        return criterePath === catPath
+      })
+      
+      // Path complet
+      const path = getCategoryPathString(cat) + (selectedSuggestion ? ' -- ' + selectedSuggestion.label : '')
+      
+      // Toutes les suggestions formatées
+      const allSuggestions = realSuggestions.map(s => 
+        `${s.label} (${s.similarityScore}%, ${formatAudience(s.audience)}${s.isSelectedByUser ? ' - SÉLECTIONNÉE' : ''}${s.isBestMatch ? ' - BEST MATCH' : ''})`
+      ).join(' | ')
+      
+      return [
+        critere.label,
+        critere.category,
+        selectedSuggestion ? selectedSuggestion.label : 'Aucune suggestion',
+        selectedSuggestion ? `${selectedSuggestion.similarityScore}%` : '',
+        selectedSuggestion ? formatAudience(selectedSuggestion.audience) : '',
+        hasRealSuggestions(critere) ? 'Avec suggestions' : 'Sans suggestions',
+        allSuggestions || 'Aucune suggestion disponible',
+        path
+      ]
+    })
+    
+    console.log('Export complet - lignes exportées:', rows.length)
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
+    
+    // Ajuster la largeur des colonnes
+    const colWidths = [
+      { wch: 30 }, // Nom
+      { wch: 25 }, // Catégorie  
+      { wch: 30 }, // Suggestion sélectionnée
+      { wch: 15 }, // Score
+      { wch: 15 }, // Audience
+      { wch: 15 }, // Statut
+      { wch: 50 }, // Toutes les suggestions
+      { wch: 40 }  // Path complet
+    ]
+    ws['!cols'] = colWidths
+    
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Résultats Complets')
+    
+    // Nom de fichier avec timestamp
+    const timestamp = new Date().toISOString().split('T')[0]
+    XLSX.writeFile(wb, `resultats-projet-complet-${timestamp}.xlsx`)
+  }
+
   // Calcul dynamique des métriques à partir de criteriaData
   const aiCriteriaCount = criteriaData.length
   const withFacebookCount = criteriaData.filter(c => hasRealSuggestions(c)).length
@@ -855,9 +925,14 @@ export function ProjectResults ({
                   <Filter size={16} className="mr-2" />
                   Filters {showAdvancedFilters && <X size={14} className="ml-1" />}
                 </Button>
-                <Button size="sm" variant="default" onClick={handleExportXLSX}>
-                  Export XLSX
+                              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={handleExportXLSX}>
+                  Export Simple
                 </Button>
+                <Button size="sm" variant="default" onClick={handleExportComplete}>
+                  Export Complet
+                </Button>
+              </div>
                 {selected.length > 0 && (
                   <>
                     <BulkActionModal
@@ -1319,9 +1394,14 @@ export function ProjectResults ({
                   }}
                 />
               </div>
-              <Button size="sm" variant="default" onClick={handleExportXLSX}>
-                Exporter en XLSX
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={handleExportXLSX}>
+                  Export Simple
+                </Button>
+                <Button size="sm" variant="default" onClick={handleExportComplete}>
+                  Export Complet
+                </Button>
+              </div>
               {selected.length > 0 && (
                 <>
                   <BulkActionModal

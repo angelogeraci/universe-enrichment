@@ -43,7 +43,7 @@ export default function CreateCategoryListDialog({ onCreated }: { onCreated?: ()
       reset()
       onCreated?.()
       if (result.slug) {
-        router.push(`/categories/${result.slug}/edit`)
+        router.push(`/app/categories/${result.slug}/edit`)
       }
     } catch (e: any) {
       setError(e.message || "Erreur inconnue")

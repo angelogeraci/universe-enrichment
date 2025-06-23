@@ -28,8 +28,8 @@ export default function EditCategoryListPage() {
             const data = await response.json()
             console.log('Données récupérées:', data)
             if (data?.slug && data.slug !== slug) {
-              console.log(`Redirection vers: /categories/${data.slug}/edit`)
-              router.replace(`/categories/${data.slug}/edit`)
+              console.log(`Redirection vers: /app/categories/${data.slug}/edit`)
+              router.replace(`/app/categories/${data.slug}/edit`)
               return
             }
           }

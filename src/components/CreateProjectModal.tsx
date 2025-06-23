@@ -91,7 +91,7 @@ export default function CreateProjectModal({
         setOpen(false)
         reset()
         if (onProjectCreated) onProjectCreated()
-        router.push('/projects/create')
+        router.push('/app/projects/create')
       }
     } catch (e: any) {
       const errorMessage = e.message || "Unknown error"

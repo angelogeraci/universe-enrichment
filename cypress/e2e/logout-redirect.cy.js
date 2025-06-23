@@ -12,9 +12,9 @@ describe('Déconnexion et sécurité', () => {
     cy.wait(1000)
     cy.reload()
     cy.wait(1000)
-    cy.url().should('satisfy', (url) => url.includes('/login') || url.includes('/dashboard'))
+    cy.url().should('satisfy', (url) => url.includes('/login') || url.includes('/app/projects'))
     // Tente d'accéder à une page protégée
-    cy.visit('/dashboard', { failOnStatusCode: false })
+    cy.visit('/app/projects', { failOnStatusCode: false })
     cy.url().should('include', '/login')
   })
 }) 

@@ -250,7 +250,7 @@ export default function ProjectsPage() {
           <Button 
             size="icon" 
             variant="outline"
-            onClick={() => router.push(`/projects/${row.original.slug || row.original.id}`)}
+                                    onClick={() => router.push(`/app/projects/${row.original.slug || row.original.id}`)}
             title="View"
           >
             <Eye size={18} />

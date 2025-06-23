@@ -71,28 +71,28 @@ export function AppSidebar() {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-                  <Link href="/admin/prompts" data-cy="sidebar-admin-prompts">
+                  <Link href="/app/admin/prompts" data-cy="sidebar-admin-prompts">
                     <MessageSquare className="mr-3 h-5 w-5" /> Prompts
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-                  <Link href="/admin/logs" data-cy="sidebar-admin-logs">
+                  <Link href="/app/admin/logs" data-cy="sidebar-admin-logs">
                     <FileSearch2 className="mr-3 h-5 w-5" /> Logs
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-                  <Link href="/admin/settings" data-cy="sidebar-admin-settings">
+                  <Link href="/app/admin/settings" data-cy="sidebar-admin-settings">
                     <Settings className="mr-3 h-5 w-5" /> Settings
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-                  <Link href="/admin/users" data-cy="sidebar-admin-users">
+                  <Link href="/app/admin/users" data-cy="sidebar-admin-users">
                     <User className="mr-3 h-5 w-5" /> Users
                   </Link>
                 </SidebarMenuButton>
@@ -100,8 +100,6 @@ export function AppSidebar() {
             </SidebarMenu>
           </>
         )}
-
-
 
         {/* Déconnexion en bas */}
         <div className="flex-1" />

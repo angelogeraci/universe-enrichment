@@ -178,7 +178,7 @@ const CategoriesList = forwardRef(function CategoriesList(_, ref) {
           <Button 
             size="icon" 
             variant="outline"
-            onClick={() => router.push(`/categories/${row.original.slug}/edit`)}
+                                    onClick={() => router.push(`/app/categories/${row.original.slug}/edit`)}
             title="Edit"
           >
             <Edit size={18} />

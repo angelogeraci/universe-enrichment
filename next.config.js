@@ -5,7 +5,29 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   experimental: {
-    // turbo: false supprimé car non supporté
+    // Optimisations pour Vercel
+  },
+  // Packages externes pour les composants serveur
+  serverExternalPackages: ['@prisma/client', 'prisma'],
+  // Configuration optimisée pour Vercel
+  output: 'standalone',
+  // Variables d'environnement exposées au runtime
+  env: {
+    DATABASE_URL: process.env.DATABASE_URL,
+  },
+  // Configuration des headers pour les API
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, max-age=0, must-revalidate'
+          }
+        ]
+      }
+    ]
   }
 }
 

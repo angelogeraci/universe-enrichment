@@ -31,7 +31,7 @@ describe('Affichage du menu de navigation', () => {
     cy.get('[data-cy="main-nav"] [data-cy="nav-admin"]').should('not.exist')
   })
 
-  const privateRoutes = ['/dashboard', '/projects', '/enrichment', '/scoring', '/admin']
+  const privateRoutes = ['/app/projects', '/app/categories', '/app/admin']
   privateRoutes.forEach(route => {
     it(`affiche le breadcrumb sur ${route}`, () => {
       cy.visit('/login')
