@@ -13,7 +13,8 @@
     "cypress:open": "cypress open",
     "cypress:run": "cypress run",
     "test:e2e": "cypress run",
-    "test:all": "npm run test && npm run test:e2e"
+    "test:all": "npm run test && npm run test:e2e",
+    "search-logs": "npx ts-node scripts/search-facebook-logs.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",

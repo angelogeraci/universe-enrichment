@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createSlug } from '@/lib/utils'
+import { facebookLogger } from '@/lib/facebook-logger'
 
 // Paramètres de crawl Facebook (à rendre dynamiques via settings plus tard)
 const FACEBOOK_BATCH_SIZE = 100 // nombre de requêtes avant pause
@@ -173,98 +174,157 @@ async function triggerEnrichment(project: any, categories: any[], req: NextReque
   }
 
   // ÉTAPE 2: Récupération de tous les critères générés
-  console.log('📋 PHASE 2: RÉCUPÉRATION DES CRITÈRES GÉNÉRÉS')
-  const allCriteres = await prisma.critere.findMany({
-    where: { projectId: project.id },
+  console.log('📋 PHASE 2: RÉCUPÉRATION DES CRITÈRES "pending" ou "retry"')
+  let criteresToProcess = await prisma.critere.findMany({
+    where: { projectId: project.id, status: { in: ["pending", "retry"] } },
     orderBy: { createdAt: 'asc' }
   })
-
-  console.log(`📊 TOTAL CRITÈRES GÉNÉRÉS: ${allCriteres.length}`)
-  totalSteps = allCriteres.length
-
-  // ÉTAPE 3: Appels automatiques aux suggestions Facebook
-  console.log('🔍 PHASE 3: ENRICHISSEMENT SUGGESTIONS FACEBOOK')
+  totalSteps = criteresToProcess.length
   let facebookProcessedCount = 0
-  
-  // Charger dynamiquement les settings
-  const { facebookBatchSize, facebookPauseMs, facebookRelevanceScoreThreshold } = await getAppSettings()
+  const facebookFailed: { label: string, error: string }[] = []
+  const { facebookBatchSize, facebookPauseMs, facebookRelevanceScoreThreshold } = await getAppSettings();
 
-  for (const critere of allCriteres) {
-    // Vérifier le statut avant chaque critère Facebook
-    const projectStatus = await prisma.project.findUnique({ where: { id: project.id } })
-    if (!projectStatus || ['cancelled', 'paused'].includes(projectStatus.enrichmentStatus)) {
-      console.log('🛑 Enrichissement Facebook interrompu:', critere.label)
-      return
-    }
-
-    try {
-      console.log(`🔄 RECHERCHE FACEBOOK: ${critere.label}`)
-
-      // Appel à l'API Facebook suggestions
-      const facebookResponse = await fetch(`${baseUrl}/api/facebook/suggestions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          critereId: critere.id,
-          query: critere.label,
-          country: critere.country,
-          relevanceScoreThreshold: facebookRelevanceScoreThreshold
-        })
-      })
-
-      const facebookData = await facebookResponse.json()
-
-      if (facebookResponse.ok) {
-        facebookProcessedCount++
-        console.log(`✅ SUGGESTIONS FACEBOOK ${critere.label}: ${facebookData.totalFound || 0} trouvées`)
-      } else {
-        console.log(`❌ ERREUR FACEBOOK ${critere.label}:`, facebookData.error)
-        // On ne considère pas ça comme une erreur bloquante
-      }
-
-      // Pause courte pour éviter de surcharger l'API Facebook
-      await new Promise(resolve => setTimeout(resolve, 100))
-
-      // PAUSE LONGUE toutes les facebookBatchSize requêtes
-      if (facebookProcessedCount > 0 && facebookProcessedCount % facebookBatchSize === 0) {
-        console.log(`⏸️ Pause Facebook de ${facebookPauseMs / 1000}s après ${facebookBatchSize} requêtes...`)
-        
-        // Vérifier le statut AVANT la pause longue
-        const statusBeforePause = await prisma.project.findUnique({ where: { id: project.id } })
-        if (!statusBeforePause || ['cancelled', 'paused'].includes(statusBeforePause.enrichmentStatus)) {
-          console.log('🛑 Enrichissement arrêté pendant la pause Facebook')
-          return
+  // Boucle principale : tant qu'il reste des critères à traiter
+  while (criteresToProcess.length > 0) {
+    for (let idx = 0; idx < criteresToProcess.length; idx++) {
+      const critere = criteresToProcess[idx];
+      let attempt = 0;
+      let success = false;
+      let lastError = '';
+      while (attempt < 3 && !success) {
+        attempt++;
+        console.log(`🔄 [${idx + 1}/${totalSteps}] Critère: "${critere.label}" (tentative ${attempt}/3)`);
+        try {
+          const facebookResponse = await fetch(`${baseUrl}/api/facebook/suggestions`, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'X-Log-Type': 'AUTO_ENRICHMENT',
+              'X-Project-Slug': project.slug,
+              'X-Project-Id': project.id
+            },
+            body: JSON.stringify({
+              critereId: critere.id,
+              query: critere.label,
+              country: critere.country
+            })
+          });
+          let facebookData;
+          try {
+            facebookData = await facebookResponse.json();
+          } catch (e) {
+            const raw = await facebookResponse.text();
+            lastError = `Réponse non JSON (code ${facebookResponse.status}): ${raw.substring(0, 200)}`;
+            console.error(`❌ ERREUR PARSING FACEBOOK ${critere.label}:`, lastError);
+            // Statut retry, jamais failed
+            await prisma.critere.update({ where: { id: critere.id }, data: { status: "retry", note: lastError } });
+            await new Promise(res => setTimeout(res, 1000 * attempt));
+            continue;
+          }
+          if (facebookResponse.ok) {
+            facebookProcessedCount++;
+            console.log(`✅ SUGGESTIONS FACEBOOK ${critere.label}: ${facebookData.totalFound || 0} trouvées`);
+            success = true;
+            await prisma.critere.update({ where: { id: critere.id }, data: { status: "done", note: null } });
+          } else {
+            lastError = facebookData.error || `Erreur HTTP ${facebookResponse.status}`;
+            console.log(`❌ ERREUR FACEBOOK ${critere.label}:`, lastError);
+            // Si erreur 5xx ou rate limit, retry, sinon failed
+            if (facebookResponse.status >= 500 || facebookResponse.status === 429) {
+              await prisma.critere.update({ where: { id: critere.id }, data: { status: "retry", note: lastError } });
+            } else {
+              await prisma.critere.update({ where: { id: critere.id }, data: { status: "failed", note: lastError } });
+            }
+            await new Promise(res => setTimeout(res, 1000 * attempt));
+          }
+        } catch (error) {
+          lastError = typeof error === 'object' && error !== null && 'message' in error ? (error as any).message : String(error);
+          console.error(`❌ EXCEPTION FACEBOOK ${critere.label}:`, lastError);
+          
+          // Analyser le type d'erreur pour déterminer la stratégie
+          let shouldRetry = true;
+          let delayMultiplier = 1;
+          
+          if (lastError.includes('Token Facebook invalide') || lastError.includes('Non autorisé (401)')) {
+            // Erreur de token : ne pas retenter, c'est définitif
+            shouldRetry = false;
+            await prisma.critere.update({ where: { id: critere.id }, data: { status: "failed", note: lastError } });
+            console.error(`🚫 ERREUR CRITIQUE TOKEN: ${critere.label} - Arrêt des tentatives`);
+          } else if (lastError.includes('Rate limit') || lastError.includes('429')) {
+            // Rate limit : retry avec délai plus long
+            delayMultiplier = 5;
+            await prisma.critere.update({ where: { id: critere.id }, data: { status: "retry", note: lastError } });
+            console.warn(`⏸️ RATE LIMIT: ${critere.label} - Retry avec délai prolongé`);
+          } else if (lastError.includes('Erreur serveur') || lastError.includes('500')) {
+            // Erreur serveur : retry avec délai moyen
+            delayMultiplier = 3;
+            await prisma.critere.update({ where: { id: critere.id }, data: { status: "retry", note: lastError } });
+            console.warn(`🔧 ERREUR SERVEUR: ${critere.label} - Retry avec délai moyen`);
+          } else if (lastError.includes('network') || lastError.includes('timeout') || lastError.includes('AbortError')) {
+            // Erreur réseau : retry avec délai court
+            delayMultiplier = 2;
+            await prisma.critere.update({ where: { id: critere.id }, data: { status: "retry", note: lastError } });
+            console.warn(`🌐 ERREUR RÉSEAU: ${critere.label} - Retry avec délai court`);
+          } else {
+            // Erreur inconnue : retry avec délai standard
+            await prisma.critere.update({ where: { id: critere.id }, data: { status: "retry", note: lastError } });
+            console.warn(`❓ ERREUR INCONNUE: ${critere.label} - Retry standard`);
+          }
+          
+          if (shouldRetry) {
+            const delay = 1000 * attempt * delayMultiplier;
+            console.log(`⏳ Attente ${delay}ms avant retry (tentative ${attempt}/${3})`);
+            await new Promise(res => setTimeout(res, delay));
+          } else {
+            // Si on ne doit pas retenter, sortir de la boucle while
+            break;
+          }
         }
-        
-        // Mettre à jour le statut pour indiquer qu'on est toujours en processing
+      }
+      if (!success) {
+        facebookFailed.push({ label: critere.label, error: lastError });
+        console.warn(`❌ [${idx + 1}/${totalSteps}] ÉCHEC Critère: "${critere.label}" après 3 tentatives : ${lastError}`);
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (facebookProcessedCount > 0 && facebookProcessedCount % facebookBatchSize === 0) {
+        console.log(`⏸️ Pause Facebook de ${facebookPauseMs / 1000}s après ${facebookBatchSize} requêtes réussies...`);
+        const statusBeforePause = await prisma.project.findUnique({ where: { id: project.id } });
+        if (!statusBeforePause || ['cancelled', 'paused'].includes(statusBeforePause.enrichmentStatus)) {
+          console.log('🛑 Enrichissement arrêté pendant la pause Facebook');
+          return;
+        }
         await prisma.project.update({
           where: { id: project.id },
           data: { 
             enrichmentStatus: 'processing',
-            updatedAt: new Date() // Important pour la détection de pause Facebook
+            updatedAt: new Date()
           }
-        })
-        
-        // Attendre la pause
-        await new Promise(resolve => setTimeout(resolve, facebookPauseMs))
-        
-        // Vérifier le statut APRÈS la pause longue 
-        const statusAfterPause = await prisma.project.findUnique({ where: { id: project.id } })
+        });
+        await new Promise(resolve => setTimeout(resolve, facebookPauseMs));
+        const statusAfterPause = await prisma.project.findUnique({ where: { id: project.id } });
         if (!statusAfterPause || ['cancelled', 'paused'].includes(statusAfterPause.enrichmentStatus)) {
-          console.log('🛑 Enrichissement arrêté après la pause Facebook')
-          return
+          console.log('🛑 Enrichissement arrêté après la pause Facebook');
+          return;
         }
-        
-        console.log(`▶️ Reprise après pause Facebook (${facebookProcessedCount}/${allCriteres.length} traités)`)
+        console.log(`▶️ Reprise après pause Facebook (${facebookProcessedCount}/${totalSteps} traités)`);
       }
-
-    } catch (error) {
-      console.error(`❌ EXCEPTION FACEBOOK ${critere.label}:`, error)
-      // On ne considère pas ça comme une erreur bloquante
+    }
+    // Après un passage, recharger les critères "retry" (toujours pour ce projet)
+    criteresToProcess = await prisma.critere.findMany({
+      where: { projectId: project.id, status: "retry" },
+      orderBy: { createdAt: 'asc' }
+    });
+    if (criteresToProcess.length > 0) {
+      console.log(`🔁 ${criteresToProcess.length} critères à retenter (status=retry)`);
     }
   }
 
-  console.log(`🎉 SUGGESTIONS FACEBOOK: ${facebookProcessedCount}/${allCriteres.length} critères traités`)
+  if (facebookFailed.length > 0) {
+    console.warn(`⚠️ ${facebookFailed.length} critères Facebook ont échoué après 3 tentatives :`);
+    facebookFailed.forEach(f => console.warn(`- ${f.label} : ${f.error}`));
+  }
+
+  console.log(`🎉 SUGGESTIONS FACEBOOK: ${facebookProcessedCount}/${totalSteps} critères traités`)
 
   // Marquer le projet comme terminé ou en erreur
   const totalCategories = categories.length
@@ -273,7 +333,6 @@ async function triggerEnrichment(project: any, categories: any[], req: NextReque
   if (processedCount === 0) {
     finalStatus = 'error'
   }
-  // Log des catégories échouées (optionnel : tu peux les stocker ailleurs si besoin)
   if (failedCount > 0) {
     console.warn(`⚠️ ${failedCount} catégories IA ont échoué sur ${totalCategories}`)
   }
@@ -283,6 +342,14 @@ async function triggerEnrichment(project: any, categories: any[], req: NextReque
     where: { id: project.id },
     data: { enrichmentStatus: finalStatus }
   })
+
+  // Générer un rapport de logs Facebook pour ce projet
+  try {
+    const reportSummary = facebookLogger.generateSummaryReport()
+    console.log('📊 RAPPORT FACEBOOK GÉNÉRÉ:', reportSummary)
+  } catch (error) {
+    console.error('❌ Erreur lors de la génération du rapport Facebook:', error)
+  }
 
   console.log(`🎉 Enrichissement terminé pour le projet ${project.name}`)
 }

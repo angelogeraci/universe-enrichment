@@ -25,6 +25,12 @@ export default async function AdminPage() {
           <p className="mb-4 text-sm text-muted-foreground">Consultez les requêtes et réponses d'enrichissement OpenAI pour optimiser vos prompts.</p>
           <Link href="/admin/logs" className="inline-block px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition">Voir les logs</Link>
         </div>
+        
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm flex flex-col p-6">
+          <h2 className="text-lg font-semibold mb-2">📘 Logs Facebook</h2>
+          <p className="mb-4 text-sm text-muted-foreground">Analysez les interactions avec l'API Facebook pour diagnostiquer les problèmes d'enrichissement.</p>
+          <Link href="/admin/facebook-logs" className="inline-block px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition">Analyser les logs</Link>
+        </div>
       </div>
     </div>
   )

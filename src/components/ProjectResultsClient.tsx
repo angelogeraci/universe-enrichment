@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import useSWR, { mutate as globalMutate } from 'swr'
 import { ProjectResults, Critere } from './ProjectResults'
 import { Skeleton } from './ui/skeleton'
+import { Progress } from './ui/progress'
 
 type EnrichmentStatus = 'pending' | 'processing' | 'paused' | 'cancelled' | 'done' | 'error'
 
@@ -17,6 +18,7 @@ interface ProgressData {
     eta: string
     isPausedFacebook?: boolean
     currentCategoryIndex?: number
+    currentCritereLabel?: string
   }
   metrics: {
     aiCriteria: number
@@ -203,8 +205,12 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
            (currentStatus as EnrichmentStatus) === 'error' ? 'Erreur' : 'En attente...',
     percentage: currentStatus === 'done' ? 100 : Math.round((criteres.length / totalCategories) * 100),
     errors: (currentStatus as EnrichmentStatus) === 'error' ? 1 : 0,
-    eta: currentStatus === 'processing' ? 'Calcul en cours...' : '-'
+    eta: currentStatus === 'processing' ? 'Calcul en cours...' : '-',
+    currentCritereLabel: null
   }
+
+  // Ajout : calcul isComplete pour usage local (comme dans ProjectResults)
+  const isComplete = currentStatus === 'done';
 
   // Si seuls les métriques doivent être affichées
   if (onlyMetrics) {
@@ -233,6 +239,7 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
         progress={progressData?.progress || { current: 0, total: 0, step: 'Starting...', errors: 0, eta: '-' }}
         criteriaData={data?.criteres || []}
         categoriesData={categoriesData}
+        relevanceThreshold={relevanceThreshold}
         onDataChange={async () => {
           await mutateCriteres()
         }}

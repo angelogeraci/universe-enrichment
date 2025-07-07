@@ -10,37 +10,37 @@ import { Switch } from "@/components/ui/switch"
 import { ArrowLeft } from "lucide-react"
 import { useToast } from '@/hooks/useToast'
 
-// Liste complète des pays du monde
+  // Complete list of world countries
 const countries = [
-  { value: "AD", label: "🇦🇩 Andorre" },
-  { value: "AE", label: "🇦🇪 Émirats arabes unis" },
+  { value: "AD", label: "🇦🇩 Andorra" },
+  { value: "AE", label: "🇦🇪 United Arab Emirates" },
   { value: "AF", label: "🇦🇫 Afghanistan" },
-  { value: "AG", label: "🇦🇬 Antigua-et-Barbuda" },
+  { value: "AG", label: "🇦🇬 Antigua and Barbuda" },
   { value: "AI", label: "🇦🇮 Anguilla" },
-  { value: "AL", label: "🇦🇱 Albanie" },
-  { value: "AM", label: "🇦🇲 Arménie" },
+  { value: "AL", label: "🇦🇱 Albania" },
+  { value: "AM", label: "🇦🇲 Armenia" },
   { value: "AO", label: "🇦🇴 Angola" },
-  { value: "AQ", label: "🇦🇶 Antarctique" },
-  { value: "AR", label: "🇦🇷 Argentine" },
-  { value: "AS", label: "🇦🇸 Samoa américaines" },
-  { value: "AT", label: "🇦🇹 Autriche" },
-  { value: "AU", label: "🇦🇺 Australie" },
+  { value: "AQ", label: "🇦🇶 Antarctica" },
+  { value: "AR", label: "🇦🇷 Argentina" },
+  { value: "AS", label: "🇦🇸 American Samoa" },
+  { value: "AT", label: "🇦🇹 Austria" },
+  { value: "AU", label: "🇦🇺 Australia" },
   { value: "AW", label: "🇦🇼 Aruba" },
-  { value: "AX", label: "🇦🇽 Îles Åland" },
-  { value: "AZ", label: "🇦🇿 Azerbaïdjan" },
-  { value: "BA", label: "🇧🇦 Bosnie-Herzégovine" },
-  { value: "BB", label: "🇧🇧 Barbade" },
+  { value: "AX", label: "🇦🇽 Åland Islands" },
+  { value: "AZ", label: "🇦🇿 Azerbaijan" },
+  { value: "BA", label: "🇧🇦 Bosnia and Herzegovina" },
+  { value: "BB", label: "🇧🇧 Barbados" },
   { value: "BD", label: "🇧🇩 Bangladesh" },
-  { value: "BE", label: "🇧🇪 Belgique" },
+  { value: "BE", label: "🇧🇪 Belgium" },
   { value: "BF", label: "🇧🇫 Burkina Faso" },
-  { value: "BG", label: "🇧🇬 Bulgarie" },
-  { value: "BH", label: "🇧🇭 Bahreïn" },
+  { value: "BG", label: "🇧🇬 Bulgaria" },
+  { value: "BH", label: "🇧🇭 Bahrain" },
   { value: "BI", label: "🇧🇮 Burundi" },
-  { value: "BJ", label: "🇧🇯 Bénin" },
-  { value: "BL", label: "🇧🇱 Saint-Barthélemy" },
-  { value: "BM", label: "🇧🇲 Bermudes" },
+  { value: "BJ", label: "🇧🇯 Benin" },
+  { value: "BL", label: "🇧🇱 Saint Barthélemy" },
+  { value: "BM", label: "🇧🇲 Bermuda" },
   { value: "BN", label: "🇧🇳 Brunei" },
-  { value: "BO", label: "🇧🇴 Bolivie" },
+  { value: "BO", label: "🇧🇴 Bolivia" },
   { value: "BQ", label: "🇧🇶 Bonaire" },
   { value: "BR", label: "🇧🇷 Brésil" },
   { value: "BS", label: "🇧🇸 Bahamas" },
@@ -311,8 +311,8 @@ export default function CreateProjectPage() {
           throw new Error('Erreur lors du chargement des catégories')
         }
       } catch (error) {
-        console.error('Erreur lors du chargement des catégories:', error)
-        showError('Impossible de charger les listes de catégories')
+        console.error('Error loading categories:', error)
+        showError('Unable to load category lists')
       }
     }
     fetchCategories()
@@ -338,24 +338,24 @@ export default function CreateProjectPage() {
       
       if (!res.ok) {
         const data = await res.json()
-        const errorMessage = data.error || 'Erreur lors de la création du projet'
+        const errorMessage = data.error || 'Error creating project'
         setError(errorMessage)
         showError(errorMessage, { duration: 6000 })
         setIsSubmitting(false)
         return
       }
       
-      // Succès
-      success('Projet créé avec succès ! Enrichissement en cours...', { duration: 4000 })
+      // Success
+      success('Project created successfully! Enrichment in progress...', { duration: 4000 })
       
-      // Nettoyer le localStorage
+      // Clean localStorage
       localStorage.removeItem('newProjectData')
       
-      // Rediriger vers la liste des projets
+      // Redirect to projects list
       router.push('/projects')
       
     } catch (err: any) {
-      const errorMessage = 'Erreur réseau ou serveur'
+      const errorMessage = 'Network or server error'
       setError(errorMessage)
       showError(errorMessage, { duration: 6000 })
       setIsSubmitting(false)
@@ -365,7 +365,7 @@ export default function CreateProjectPage() {
   if (!projectData) {
     return (
       <div className="w-full px-32 py-6">
-        <div className="text-center">Chargement...</div>
+        <div className="text-center">Loading...</div>
       </div>
     )
   }
@@ -380,23 +380,23 @@ export default function CreateProjectPage() {
           className="flex items-center gap-2"
         >
           <ArrowLeft className="h-4 w-4" />
-          Retour
+          Back
         </Button>
-        <h1 className="text-2xl font-bold">Configuration du projet</h1>
+        <h1 className="text-2xl font-bold">Project Configuration</h1>
       </div>
 
       <div className="max-w-2xl">
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Informations du projet</CardTitle>
+            <CardTitle>Project Information</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               <div>
-                <span className="font-medium">Nom :</span> {projectData.name}
+                <span className="font-medium">Name:</span> {projectData.name}
               </div>
               <div>
-                <span className="font-medium">Description :</span> {projectData.description}
+                <span className="font-medium">Description:</span> {projectData.description}
               </div>
             </div>
           </CardContent>
@@ -406,14 +406,14 @@ export default function CreateProjectPage() {
           {/* Sélection du pays */}
           <Card>
             <CardHeader>
-              <CardTitle>1. Sélection du pays</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Select
-                value={country}
-                onChange={setCountry}
-                options={countries}
-                placeholder="Rechercher et sélectionner un pays..."
+                          <CardTitle>1. Country Selection</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Select
+              value={country}
+              onChange={setCountry}
+              options={countries}
+              placeholder="Search and select a country..."
                 isSearchable
                 isClearable
                 className="react-select-container"
@@ -425,30 +425,30 @@ export default function CreateProjectPage() {
           {/* Type de recherche */}
           <Card>
             <CardHeader>
-              <CardTitle>2. Type de recherche</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center space-x-3">
-                  <Switch
-                    id="search-type"
-                    checked={searchType === "presence"}
-                    onCheckedChange={(checked) => 
-                      setSearchType(checked ? "presence" : "origin")
+                          <CardTitle>2. Search Type</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Switch
+                  id="search-type"
+                  checked={searchType === "presence"}
+                  onCheckedChange={(checked) => 
+                    setSearchType(checked ? "presence" : "origin")
+                  }
+                />
+                <div className="flex-1">
+                  <label htmlFor="search-type" className="text-sm font-medium cursor-pointer">
+                    {searchType === "origin" 
+                      ? "Criteria originating from country only" 
+                      : "Criteria originating AND present in country"
                     }
-                  />
-                  <div className="flex-1">
-                    <label htmlFor="search-type" className="text-sm font-medium cursor-pointer">
-                      {searchType === "origin" 
-                        ? "Critères originaires du pays uniquement" 
-                        : "Critères originaires ET présents dans le pays"
-                      }
-                    </label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {searchType === "origin" 
-                        ? "Rechercher uniquement les critères qui ont été créés dans ce pays" 
-                        : "Rechercher les critères créés dans ce pays ainsi que ceux présents dans ce pays"
-                      }
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {searchType === "origin" 
+                      ? "Search only criteria that were created in this country" 
+                      : "Search criteria created in this country as well as those present in this country"
+                    }
                     </p>
                   </div>
                 </div>
@@ -459,14 +459,14 @@ export default function CreateProjectPage() {
           {/* Sélection de la liste de catégories */}
           <Card>
             <CardHeader>
-              <CardTitle>3. Liste de catégories</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Select
-                value={categoryList}
-                onChange={setCategoryList}
-                options={categories}
-                placeholder="Sélectionner une liste de catégories..."
+                          <CardTitle>3. Category List</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Select
+              value={categoryList}
+              onChange={setCategoryList}
+              options={categories}
+              placeholder="Select a category list..."
                 isSearchable
                 isClearable
                 className="react-select-container"
@@ -474,21 +474,21 @@ export default function CreateProjectPage() {
               />
               {categories.length === 0 && (
                 <p className="text-xs text-muted-foreground mt-2">
-                  Aucune liste de catégories disponible. 
+                  No category lists available. 
                   <Button
                     type="button"
                     variant="link"
                     className="p-0 h-auto text-xs"
                     onClick={() => router.push('/categories')}
                   >
-                    Créer une liste de catégories
+                    Create a category list
                   </Button>
                 </p>
               )}
             </CardContent>
           </Card>
 
-          {/* Boutons d'action */}
+          {/* Action buttons */}
           <div className="flex gap-3 pt-4">
             <Button
               type="button"
@@ -496,14 +496,14 @@ export default function CreateProjectPage() {
               onClick={() => router.push('/projects')}
               className="flex-1"
             >
-              Annuler
+              Cancel
             </Button>
             <Button
               type="submit"
               disabled={!country || !categoryList || isSubmitting}
               className="flex-1"
             >
-              {isSubmitting ? "Création..." : "Créer le projet"}
+              {isSubmitting ? "Creating..." : "Create Project"}
             </Button>
           </div>
         </form>

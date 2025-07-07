@@ -84,6 +84,7 @@ export async function GET(
     let progressPercentage = 0
     let estimatedCompletion = '-'
     let isPausedFacebook = false
+    let currentCritereLabel = null;
 
     if (project.enrichmentStatus === 'pending') {
       currentStep = 'En attente de démarrage'
@@ -133,6 +134,18 @@ export async function GET(
         progressPercentage = 95
         estimatedCompletion = 'Quelques secondes'
       }
+
+      if (typeof project.currentCategoryIndex === 'number') {
+        // Récupérer le critère en cours de traitement (ordre de création)
+        const criteres = await prisma.critere.findMany({
+          where: { projectId: project.id },
+          orderBy: { createdAt: 'asc' },
+          select: { label: true }
+        });
+        if (criteres[project.currentCategoryIndex]) {
+          currentCritereLabel = criteres[project.currentCategoryIndex].label;
+        }
+      }
     } else if (project.enrichmentStatus === 'done') {
       currentStep = 'Terminé'
       progressPercentage = 100
@@ -153,7 +166,8 @@ export async function GET(
         errors: project.enrichmentStatus === 'error' ? 1 : 0,
         eta: estimatedCompletion,
         isPausedFacebook,
-        currentCategoryIndex: project.currentCategoryIndex
+        currentCategoryIndex: project.currentCategoryIndex,
+        currentCritereLabel
       },
       metrics: {
         aiCriteria: criteresCount,

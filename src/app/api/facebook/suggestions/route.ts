@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { facebookLogger, createFacebookLogEntry, finalizeFacebookLogEntry } from '@/lib/facebook-logger'
 
 // Initialisation de l'API Facebook
 const AccessToken = process.env.FACEBOOK_ACCESS_TOKEN
@@ -410,171 +411,324 @@ function calculateAudienceScore(audience: number): number {
   return score
 }
 
-// Fonction pour rechercher des intérêts Facebook avec scoring contextuel avancé
-async function getFacebookInterestSuggestions(query: string, country: string, categoryPath: string[], category: string): Promise<FacebookSuggestion[]> {
-  if (!AccessToken) {
-    throw new Error('FACEBOOK_ACCESS_TOKEN non défini')
-  }
-
-  console.log(`🔍 DÉBUT PROCESSUS - Recherche suggestions Facebook`)
-  console.log(`📋 INPUT: query="${query}", country=${country}`)
-  console.log(`📂 Path: [${categoryPath.join(' > ')}]`)
-  console.log(`🏷️ Catégorie: ${category}`)
-
-  // ÉTAPE 1: Déterminer le contexte à partir du path et catégorie
-  const contextKeywords = getContextualKeywords(categoryPath, category)
+async function testFacebookToken(token: string): Promise<{ isValid: boolean; error?: string }> {
+  const logData = createFacebookLogEntry('TOKEN_TEST', 'token-validation')
   
-  // ÉTAPE 2: Recherche d'intérêts via Graph API
-  const searchUrl = `https://graph.facebook.com/v18.0/search?type=adinterest&q=${encodeURIComponent(query)}&limit=15&access_token=${AccessToken}`
-  
-  console.log(`🌐 Appel Facebook API: ${searchUrl.replace(AccessToken, '***')}`)
-  
-  const searchResponse = await fetch(searchUrl)
-  const searchData = await searchResponse.json()
-
-  if (searchData.error) {
-    console.error('❌ Erreur recherche Facebook:', searchData.error)
-    throw new Error(`Erreur Facebook API: ${searchData.error.message}`)
-  }
-
-  console.log(`✅ Facebook API: ${searchData.data?.length || 0} intérêts trouvés`)
-
-  if (!searchData.data || searchData.data.length === 0) {
-    console.log('⚠️ Aucun intérêt trouvé')
-    return []
-  }
-
-  // ÉTAPE 3: Calcul des scores pour chaque suggestion
-  const suggestions: FacebookSuggestion[] = []
-
-  for (const interest of searchData.data) {
-    console.log(`\n🔍 ANALYSE: "${interest.name}"`)
-    
-    // Score 1: Similarité textuelle
-    const textualSimilarity = calculateTextualSimilarity(query, interest.name)
-    console.log(`📝 Similarité textuelle: ${(textualSimilarity * 100).toFixed(0)}%`)
-    
-    // Score 2: Pertinence contextuelle  
-    const contextualScore = calculateContextualScore(interest.name, contextKeywords)
-    
-    // Score 3: Nouveau - Score marque/modèle
-    const brandScore = calculateBrandScore(interest.name, query, contextKeywords)
-    
-    // Score 4: Score d'audience - Correction pour Facebook API
-    const lowerBound = interest.audience_size_lower_bound || 0
-    const upperBound = interest.audience_size_upper_bound || 0
-    const audience = lowerBound > 0 && upperBound > 0 ? Math.round((lowerBound + upperBound) / 2) : 0
-    
-    const audienceScore = calculateAudienceScore(audience)
-    console.log(`👥 Audience: ${lowerBound.toLocaleString()}-${upperBound.toLocaleString()} → Moyenne: ${audience.toLocaleString()} → Score: ${(audienceScore * 100).toFixed(0)}%`)
-    
-    // Score 5: Type d'intérêt (privilégier "interest")
-    const interestTypeScore = interest.type === 'interest' ? 1.0 : 0.7
-    console.log(`🎯 Type: ${interest.type} → Score: ${(interestTypeScore * 100).toFixed(0)}%`)
-    
-    // SCORE FINAL PONDÉRÉ AMÉLIORÉ - CORRECTION PORSCHE
-    const finalScore = (
-      textualSimilarity * 0.10 +      // 10% - Similarité textuelle 
-      contextualScore * 0.20 +        // 20% - Pertinence contextuelle (RÉDUIT pour éviter sur-pondération)
-      brandScore * 0.30 +             // 30% - Score marque (AUGMENTÉ pour privilégier marques pures)
-      audienceScore * 0.35 +          // 35% - Taille audience (MAJORITÉ - pour privilégier grandes audiences)
-      interestTypeScore * 0.05        // 5% - Type d'intérêt
-    )
-    
-    // PÉNALITÉ SECTORIELLE: Détecter les secteurs incompatibles
-    let sectorPenalty = 0
-    const suggestionLower = interest.name.toLowerCase()
-    
-    // Pour le secteur Automotive, pénaliser fortement les secteurs non-automobiles
-    if (contextKeywords.some(k => ['automotive', 'cars', 'vehicles'].includes(k.toLowerCase()))) {
-      const nonAutomotiveSectors = [
-        // Mode & Beauté (Tom Ford, etc.)
-        'tom ford', 'giorgio armani', 'calvin klein', 'versace', 'prada', 'gucci',
-        'cosmetics', 'perfume', 'fragrance', 'makeup', 'beauty', 'fashion', 'clothing',
-        
-        // Divertissement & Célébrités  
-        'entertainment', 'celebrity', 'music', 'singer', 'actor', 'film', 'movie',
-        'tv show', 'series', 'band', 'artist', 'performer',
-        
-        // Tech & Digital
-        'software', 'app', 'digital platform', 'website', 'social media', 'tech company',
-        
-        // Autres secteurs
-        'restaurant', 'food', 'cooking', 'sports team', 'football club', 'basketball'
-      ]
-      
-      for (const sector of nonAutomotiveSectors) {
-        if (suggestionLower.includes(sector)) {
-          sectorPenalty = 0.85  // Pénalité de 85% pour secteurs incompatibles
-          console.log(`🚫 PÉNALITÉ SECTORIELLE: "${interest.name}" contient "${sector}" - ${sectorPenalty * 100}% de pénalité`)
-          break
-        }
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/v21.0/me?access_token=${token}`,
+      {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (compatible; Universe-Enrichment/1.0)',
+        },
+        signal: AbortSignal.timeout(10000)
       }
-    }
-    
-    // BONUS SPÉCIAL: Correspondance exacte de nom (sans contexte) MAIS avec validation sectorielle
-    let exactMatchBonus = 0
-    if (interest.name.toLowerCase() === query.toLowerCase() && sectorPenalty === 0) {
-      exactMatchBonus = 0.15  // Bonus réduit à 15% et seulement si pas de conflit sectoriel
-      console.log(`🎯 BONUS CORRESPONDANCE EXACTE (validée): +${exactMatchBonus}`)
-    } else if (interest.name.toLowerCase() === query.toLowerCase() && sectorPenalty > 0) {
-      console.log(`❌ CORRESPONDANCE EXACTE REJETÉE: conflit sectoriel détecté`)
-    }
-    
-    // Application de la pénalité sectorielle
-    const finalScoreWithPenalty = Math.max(0, finalScore - sectorPenalty + exactMatchBonus)
-    
-    // Détermination du niveau de pertinence
-    const relevance = getRelevanceLevel(finalScoreWithPenalty)
-    
-    // Raison du matching pour traçabilité
-    let matchingReason = ''
-    if (textualSimilarity > 0.8) matchingReason += 'Similarité textuelle élevée. '
-    if (contextualScore > 0.3) matchingReason += 'Contexte pertinent. '
-    if (brandScore > 0.5) matchingReason += 'Marque principale détectée. '
-    if (brandScore < 0.2) matchingReason += 'Possiblement un modèle spécifique. '
-    if (audienceScore > 0.5) matchingReason += 'Grande audience. '
-    if (interestTypeScore === 1.0) matchingReason += 'Type interest. '
-    if (!matchingReason) matchingReason = 'Correspondance basique.'
-    
-    // Ajout du niveau de pertinence dans la raison
-    matchingReason += ` [${relevance.level.toUpperCase()}]`
-    
-    console.log(`🎯 SCORE FINAL: ${(finalScoreWithPenalty * 100).toFixed(0)}% - ${relevance.level} - ${matchingReason}`)
-    if (!relevance.isRelevant) {
-      console.log(`⚠️ SUGGESTION NON PERTINENTE (< ${(RELEVANCE_THRESHOLDS.MINIMUM_ACCEPTABLE * 100).toFixed(0)}%)`)
-    }
-    
-    suggestions.push({
-      label: interest.name,
-      audience,
-      textualSimilarity,
-      contextualScore,
-      audienceScore,
-      interestTypeScore,
-      brandScore,
-      finalScore: finalScoreWithPenalty,
-      relevanceLevel: relevance.level,
-      isRelevant: relevance.isRelevant,
-      matchingReason: matchingReason.trim()
-    })
-  }
+    )
 
-  // ÉTAPE 4: Tri par score final décroissant
-  const sortedSuggestions = suggestions.sort((a, b) => b.finalScore - a.finalScore)
+    const responseText = await response.text()
+    
+    facebookLogger.log(finalizeFacebookLogEntry(logData, 'SUCCESS', {
+      type: 'TOKEN_TEST',
+      critere: 'token-validation',
+      responseStatus: response.status,
+      responseHeaders: Object.fromEntries(response.headers.entries()),
+      responseBody: responseText.substring(0, 500), // Limiter la taille
+      finalResult: response.ok ? 'SUCCESS' : 'FAILED'
+    }))
+
+    if (!response.ok) {
+      return { isValid: false, error: `HTTP ${response.status}: ${responseText}` }
+    }
+
+    try {
+      const data = JSON.parse(responseText)
+      return { isValid: true }
+    } catch (parseError) {
+      return { isValid: false, error: `Invalid JSON response: ${parseError}` }
+    }
+  } catch (error) {
+    facebookLogger.log(finalizeFacebookLogEntry(logData, 'FAILED', {
+      type: 'TOKEN_TEST',
+      critere: 'token-validation',
+      errorType: 'NETWORK',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      finalResult: 'FAILED'
+    }))
+    
+    return { isValid: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+async function fetchFacebookSuggestions(
+  critere: string, 
+  country: string, 
+  token: string,
+  retryAttempt: number = 0,
+  maxRetries: number = 3,
+  logType: 'AUTO_ENRICHMENT' | 'MANUAL_SEARCH' = 'MANUAL_SEARCH',
+  projectInfo?: { slug?: string; id?: string }
+): Promise<{ success: boolean; data?: any[]; error?: string; shouldRetry?: boolean }> {
   
-  console.log(`\n🏆 TOP 5 SUGGESTIONS:`)
-  sortedSuggestions.slice(0, 5).forEach((suggestion, index) => {
-    const relevanceIcon = suggestion.isRelevant ? '✅' : '❌'
-    console.log(`${index + 1}. ${relevanceIcon} "${suggestion.label}" - ${(suggestion.finalScore * 100).toFixed(0)}% (${suggestion.relevanceLevel})`)
+  const logData = createFacebookLogEntry(logType, critere, {
+    projectSlug: projectInfo?.slug,
+    projectId: projectInfo?.id,
+    retryAttempt,
+    maxRetries
   })
 
-  // Statistiques de pertinence
-  const relevantCount = sortedSuggestions.filter(s => s.isRelevant).length
-  const irrelevantCount = sortedSuggestions.length - relevantCount
-  console.log(`\n📊 STATISTIQUES: ${relevantCount} pertinentes, ${irrelevantCount} non pertinentes`)
+  console.log(`🔄 RECHERCHE FACEBOOK${retryAttempt > 0 ? ` (Tentative ${retryAttempt + 1}/${maxRetries + 1})` : ''}: ${critere}`)
 
-  return sortedSuggestions
+  try {
+    const baseUrl = 'https://graph.facebook.com/v21.0/search'
+    const params = new URLSearchParams({
+      type: 'adinterest',
+      q: critere,
+      locale: 'fr_FR',
+      access_token: token,
+      limit: '10'
+    })
+
+    const requestUrl = `${baseUrl}?${params.toString()}`
+    const requestPayload = { critere, country, retryAttempt, maxRetries }
+
+    const response = await fetch(requestUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; Universe-Enrichment/1.0)',
+      },
+              signal: AbortSignal.timeout(30000)
+    })
+
+    // Collecter les headers de réponse
+    const responseHeaders = Object.fromEntries(response.headers.entries())
+
+    // Vérifier le statut HTTP
+    if (!response.ok) {
+      let errorType: 'RATE_LIMIT' | 'SERVER_ERROR' | 'FACEBOOK_API' = 'FACEBOOK_API'
+      let shouldRetry = false
+
+      if (response.status === 429) {
+        errorType = 'RATE_LIMIT'
+        shouldRetry = retryAttempt < maxRetries
+      } else if (response.status >= 500) {
+        errorType = 'SERVER_ERROR'
+        shouldRetry = retryAttempt < maxRetries
+      } else if (response.status === 401 || response.status === 403) {
+        errorType = 'FACEBOOK_API'
+        shouldRetry = false
+      }
+
+      const errorText = await response.text()
+      
+      facebookLogger.log(finalizeFacebookLogEntry(logData, shouldRetry ? 'RETRY' : 'FAILED', {
+        type: logType,
+        critere,
+        requestPayload,
+        responseStatus: response.status,
+        responseHeaders,
+        responseBody: errorText.substring(0, 1000),
+        errorType,
+        errorMessage: `HTTP ${response.status}: ${errorText}`,
+        retryAttempt,
+        maxRetries,
+        finalResult: shouldRetry ? 'RETRY' : 'FAILED'
+      }))
+
+      return {
+        success: false,
+        error: `HTTP ${response.status}: ${errorText}`,
+        shouldRetry
+      }
+    }
+
+    // Vérifier le Content-Type
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      facebookLogger.log(finalizeFacebookLogEntry(logData, 'FAILED', {
+        type: logType,
+        critere,
+        requestPayload,
+        responseStatus: response.status,
+        responseHeaders,
+        errorType: 'FACEBOOK_API',
+        errorMessage: `Invalid Content-Type: ${contentType}`,
+        retryAttempt,
+        maxRetries,
+        finalResult: 'FAILED'
+      }))
+
+      return {
+        success: false,
+        error: `Réponse non-JSON reçue: ${contentType}`,
+        shouldRetry: false
+      }
+    }
+
+    // Parser la réponse JSON
+    const responseText = await response.text()
+    let facebookData: any
+
+    try {
+      facebookData = JSON.parse(responseText)
+    } catch (parseError) {
+      facebookLogger.log(finalizeFacebookLogEntry(logData, 'FAILED', {
+        type: logType,
+        critere,
+        requestPayload,
+        responseStatus: response.status,
+        responseHeaders,
+        responseBody: responseText.substring(0, 1000),
+        errorType: 'PARSE',
+        errorMessage: `Erreur de parsing JSON: ${parseError}`,
+        retryAttempt,
+        maxRetries,
+        finalResult: 'FAILED'
+      }))
+
+      return {
+        success: false,
+        error: `Erreur de parsing JSON: ${parseError}`,
+        shouldRetry: false
+      }
+    }
+
+    // Vérifier les erreurs Facebook
+    if (facebookData.error) {
+      const fbError = facebookData.error
+      let errorType: 'TOKEN_INVALID' | 'RATE_LIMIT' | 'FACEBOOK_API' = 'FACEBOOK_API'
+      let shouldRetry = false
+
+      // Codes d'erreur Facebook spécifiques
+      if ([190, 102, 101].includes(fbError.code)) {
+        errorType = 'TOKEN_INVALID'
+        shouldRetry = false
+      } else if ([17, 4, 32].includes(fbError.code)) {
+        errorType = 'RATE_LIMIT'
+        shouldRetry = retryAttempt < maxRetries
+      } else {
+        shouldRetry = retryAttempt < maxRetries
+      }
+
+      facebookLogger.log(finalizeFacebookLogEntry(logData, shouldRetry ? 'RETRY' : 'FAILED', {
+        type: logType,
+        critere,
+        requestPayload,
+        responseStatus: response.status,
+        responseHeaders,
+        responseBody: responseText.substring(0, 1000),
+        errorType,
+        errorMessage: `Facebook API Error ${fbError.code}: ${fbError.message}`,
+        retryAttempt,
+        maxRetries,
+        finalResult: shouldRetry ? 'RETRY' : 'FAILED'
+      }))
+
+      return {
+        success: false,
+        error: `Facebook API Error ${fbError.code}: ${fbError.message}`,
+        shouldRetry
+      }
+    }
+
+    // Succès - traiter les données
+    const rawSuggestions = facebookData.data || []
+    
+    // Simple logging pour les données brutes
+    const simpleProcessedSuggestions = rawSuggestions.map((item: any) => ({
+      label: item.name,
+      audience: item.audience_size_lower_bound && item.audience_size_upper_bound 
+        ? `${item.audience_size_lower_bound}-${item.audience_size_upper_bound}`
+        : 'N/A',
+      similarityScore: 0.8 // Score par défaut
+    }))
+
+    facebookLogger.log(finalizeFacebookLogEntry(logData, 'SUCCESS', {
+      type: logType,
+      critere,
+      requestPayload,
+      responseStatus: response.status,
+      responseHeaders,
+      responseBody: JSON.stringify(facebookData).substring(0, 2000),
+      retryAttempt,
+      maxRetries,
+      suggestions: simpleProcessedSuggestions,
+      finalResult: 'SUCCESS'
+    }))
+
+    console.log(`✅ SUGGESTIONS FACEBOOK: ${rawSuggestions.length} trouvées pour "${critere}"`)
+    
+    return {
+      success: true,
+      data: rawSuggestions
+    }
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue'
+    let shouldRetry = retryAttempt < maxRetries
+
+    facebookLogger.log(finalizeFacebookLogEntry(logData, shouldRetry ? 'RETRY' : 'FAILED', {
+      type: logType,
+      critere,
+      errorType: 'NETWORK',
+      errorMessage,
+      retryAttempt,
+      maxRetries,
+      finalResult: shouldRetry ? 'RETRY' : 'FAILED'
+    }))
+
+    console.log(`❌ EXCEPTION FACEBOOK ${critere}: ${errorMessage}`)
+    
+    return { 
+      success: false,
+      data: [],
+      error: errorMessage,
+      shouldRetry
+    }
+  }
+}
+
+async function fetchFacebookSuggestionsWithRetry(
+  critere: string,
+  country: string,
+  token: string,
+  logType: 'AUTO_ENRICHMENT' | 'MANUAL_SEARCH' = 'MANUAL_SEARCH',
+  projectInfo?: { slug?: string; id?: string }
+): Promise<{ success: boolean; data?: any[]; error?: string }> {
+  
+  const maxRetries = 3
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const result = await fetchFacebookSuggestions(
+      critere, 
+      country, 
+      token, 
+      attempt, 
+      maxRetries,
+      logType,
+      projectInfo
+    )
+    
+    if (result.success || !result.shouldRetry) {
+      return result
+    }
+    
+    // Délai avant retry
+    if (attempt < maxRetries) {
+      const delays = [2000, 4000, 8000] // 2s, 4s, 8s
+      const delay = delays[attempt] || 8000
+      console.log(`⏱️  Attente ${delay}ms avant nouvelle tentative...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+  
+  return {
+    success: false,
+    error: 'Échec après tous les essais'
+  }
 }
 
 // POST endpoint pour récupérer les suggestions Facebook
@@ -583,7 +737,12 @@ export async function POST(request: NextRequest) {
     const { critereId, query, country, adAccountId, relevanceScoreThreshold } = await request.json()
     const threshold = typeof relevanceScoreThreshold === 'number' ? relevanceScoreThreshold : 0.3
     
-    console.log(`🔍 RECHERCHE SUGGESTIONS FACEBOOK: "${query}" pour ${country}`)
+    // Récupérer les headers pour le logging
+    const logType = request.headers.get('X-Log-Type') as 'AUTO_ENRICHMENT' | 'MANUAL_SEARCH' || 'MANUAL_SEARCH'
+    const projectSlug = request.headers.get('X-Project-Slug') || undefined
+    const projectId = request.headers.get('X-Project-Id') || undefined
+    
+    console.log(`🔍 RECHERCHE SUGGESTIONS FACEBOOK: "${query}" pour ${country} [${logType}]`)
     
     // Récupération des détails du critère avec path et catégorie
     const critere = await prisma.critere.findUnique({
@@ -604,14 +763,77 @@ export async function POST(request: NextRequest) {
     })
     
     // Recherche des nouvelles suggestions avec algorithme contextuel
-    const allSuggestions = await getFacebookInterestSuggestions(
-      query, 
-      country, 
-      critere.categoryPath as string[], 
-      critere.category
+    const facebookResult = await fetchFacebookSuggestionsWithRetry(
+      query,
+      country,
+      AccessToken!,
+      logType,
+      { slug: projectSlug, id: projectId }
     )
+    
+    if (!facebookResult.success) {
+      return NextResponse.json({ 
+        error: facebookResult.error || 'Échec de la recherche Facebook',
+        suggestions: [],
+        totalFound: 0
+      }, { status: 500 })
+    }
+    
+    const allSuggestions = facebookResult.data || []
+    
+    // TRAITEMENT COMPLET DES SCORES POUR CHAQUE SUGGESTION
+    const contextKeywords = getContextualKeywords(critere.categoryPath, critere.category)
+    console.log(`📊 Analyse contextuelle avec mots-clés: [${contextKeywords.join(', ')}]`)
+    
+    const processedSuggestions: FacebookSuggestion[] = allSuggestions.map((item: any) => {
+      const suggestionLabel = item.name
+      const audienceMin = item.audience_size_lower_bound || 0
+      const audienceMax = item.audience_size_upper_bound || audienceMin
+      const averageAudience = Math.round((audienceMin + audienceMax) / 2)
+      
+      // Calcul de tous les scores
+      const textualSimilarity = calculateTextualSimilarity(query, suggestionLabel)
+      const contextualScore = calculateContextualScore(suggestionLabel, contextKeywords)
+      const audienceScore = calculateAudienceScore(averageAudience)
+      const brandScore = calculateBrandScore(suggestionLabel, query, contextKeywords)
+      
+      // Score d'intérêt basé sur le type de suggestion Facebook
+      const interestTypeScore = item.disambiguation_category ? 0.1 : 0.05
+      
+      // Calcul du score final pondéré
+      const finalScore = (
+        textualSimilarity * 0.40 +      // 40% - Similarité textuelle
+        contextualScore * 0.25 +        // 25% - Pertinence contextuelle
+        audienceScore * 0.15 +          // 15% - Taille de l'audience
+        brandScore * 0.15 +             // 15% - Score de marque/brand
+        interestTypeScore * 0.05        // 5% - Type d'intérêt
+      )
+      
+      // Niveau de pertinence et validation
+      const relevanceData = getRelevanceLevel(finalScore)
+      
+      // Raison du matching pour debugging
+      const matchingReason = `Textuel: ${(textualSimilarity * 100).toFixed(1)}%, Contexte: ${(contextualScore * 100).toFixed(1)}%, Audience: ${(audienceScore * 100).toFixed(1)}%, Marque: ${(brandScore * 100).toFixed(1)}%`
+      
+      console.log(`📈 "${suggestionLabel}": Score final ${(finalScore * 100).toFixed(1)}% (${relevanceData.level}) - ${matchingReason}`)
+      
+      return {
+        label: suggestionLabel,
+        audience: averageAudience,
+        textualSimilarity,
+        contextualScore,
+        audienceScore,
+        interestTypeScore,
+        brandScore,
+        finalScore,
+        relevanceLevel: relevanceData.level,
+        matchingReason,
+        isRelevant: relevanceData.isRelevant
+      } as FacebookSuggestion
+    })
+    
     // Filtrage dynamique selon le seuil de pertinence
-    const suggestions = allSuggestions.filter(s => s.finalScore >= threshold)
+    const suggestions = processedSuggestions.filter(s => s.finalScore >= threshold)
     
     if (suggestions.length === 0) {
       console.log('⚠️ Aucune suggestion trouvée')
