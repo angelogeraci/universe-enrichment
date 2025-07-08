@@ -111,7 +111,7 @@ export function Pagination({
       {/* Sélecteur de nombre de résultats par page */}
       {showPageSize && (
         <div className="flex items-center space-x-2">
-          <p className="text-sm font-medium">Results per page:</p>
+          <p className="text-sm font-medium">Résultats par page :</p>
           <select
             value={actualPageSize}
             onChange={e => handlePageSizeChange(Number(e.target.value))}
@@ -166,11 +166,11 @@ export function Pagination({
             <span className="flex items-center gap-1 text-sm">
               <div>Page</div>
               <strong>
-                {actualCurrentPage} of {actualTotalPages}
+                {actualCurrentPage} sur {actualTotalPages}
               </strong>
             </span>
             <span className="text-sm text-gray-600">
-              ({actualTotalItems} total items)
+              ({actualTotalItems} éléments au total)
             </span>
           </>
         )}

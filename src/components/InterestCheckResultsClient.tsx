@@ -7,6 +7,7 @@ import { Badge } from './ui/badge'
 import StatusTag from "./StatusTag"
 import { Progress } from './ui/progress'
 import { Skeleton } from './ui/skeleton'
+import { Pagination } from './ui/pagination'
 import { 
   Table, 
   TableBody, 
@@ -143,7 +144,7 @@ export function InterestCheckResultsClient({
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage] = useState(20)
+  const [itemsPerPage, setItemsPerPage] = useState(25)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   // Filtres avancés
@@ -756,49 +757,22 @@ export function InterestCheckResultsClient({
             </div>
 
             {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">
-                  Affichage de {startIndex + 1} à {Math.min(endIndex, filteredInterests.length)} sur {filteredInterests.length} intérêts
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      const pageNum = i + 1
-                      return (
-                        <Button
-                          key={pageNum}
-                          variant={currentPage === pageNum ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setCurrentPage(pageNum)}
-                        >
-                          {pageNum}
-                        </Button>
-                      )
-                    })}
-                  </div>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage === totalPages}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={filteredInterests.length}
+              pageSize={itemsPerPage}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(size) => {
+                setItemsPerPage(size)
+                setCurrentPage(1) // Reset à la première page quand on change la taille
+              }}
+              canPreviousPage={currentPage > 1}
+              canNextPage={currentPage < totalPages}
+              pageSizeOptions={[10, 25, 50, 100]}
+              showPageSize={true}
+              showInfo={true}
+            />
           </div>
         )}
 
