@@ -24,7 +24,6 @@ model User {
   categoryLists CategoryList[]        @relation("OwnerCategoryLists")
   sharedCategoryLists CategoryList[]  @relation("SharedCategoryLists")
   projects  Project[]
-  interestChecks InterestCheck[]
 }
 
 enum Role {
@@ -71,50 +70,6 @@ model Project {
   enrichmentStatus String @default("pending") // "pending", "processing", "paused", "cancelled", "done", "error"
   currentCategoryIndex Int? @default(0) // Index de la catégorie en cours de traitement
   pausedAt      DateTime? // Date/heure de mise en pause
-}
-
-model InterestCheck {
-  id            String   @id @default(cuid())
-  name          String
-  slug          String   @unique
-  description   String?
-  country       String   @default("BE")
-  fileName      String   // Nom du fichier Excel uploadé
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  owner         User     @relation(fields: [ownerId], references: [id])
-  ownerId       String
-  interests     Interest[]
-  enrichmentStatus String @default("pending") // "pending", "processing", "paused", "cancelled", "done", "error"
-  currentInterestIndex Int? @default(0) // Index de l'intérêt en cours de traitement
-  pausedAt      DateTime? // Date/heure de mise en pause
-}
-
-model Interest {
-  id            String   @id @default(cuid())
-  interestCheck InterestCheck @relation(fields: [interestCheckId], references: [id])
-  interestCheckId String
-  name          String   // Le nom depuis le fichier Excel
-  country       String
-  status        String   @default("pending")
-  note          String?
-  suggestions   InterestSuggestion[]
-  selectedSuggestionId String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-
-model InterestSuggestion {
-  id              String   @id @default(cuid())
-  interest        Interest @relation(fields: [interestId], references: [id])
-  interestId      String
-  label           String
-  audience        Int
-  similarityScore Float
-  isBestMatch     Boolean  @default(false)
-  isSelectedByUser Boolean @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
 }
 
 model PromptTemplate {

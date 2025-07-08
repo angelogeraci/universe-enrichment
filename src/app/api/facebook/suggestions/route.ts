@@ -734,41 +734,58 @@ async function fetchFacebookSuggestionsWithRetry(
 // POST endpoint pour récupérer les suggestions Facebook
 export async function POST(request: NextRequest) {
   try {
-    const { critereId, query, country, adAccountId, relevanceScoreThreshold } = await request.json()
+    const { critereId, query, country, adAccountId, relevanceScoreThreshold, critere: directCritere } = await request.json()
     const threshold = typeof relevanceScoreThreshold === 'number' ? relevanceScoreThreshold : 0.3
     
     // Récupérer les headers pour le logging
     const logType = request.headers.get('X-Log-Type') as 'AUTO_ENRICHMENT' | 'MANUAL_SEARCH' || 'MANUAL_SEARCH'
     const projectSlug = request.headers.get('X-Project-Slug') || undefined
     const projectId = request.headers.get('X-Project-Id') || undefined
+    const interestCheckSlug = request.headers.get('X-InterestCheck-Slug') || undefined
+    const interestCheckId = request.headers.get('X-InterestCheck-Id') || undefined
     
-    console.log(`🔍 RECHERCHE SUGGESTIONS FACEBOOK: "${query}" pour ${country} [${logType}]`)
+    console.log(`🔍 RECHERCHE SUGGESTIONS FACEBOOK: "${query || directCritere}" pour ${country} [${logType}]`)
     
-    // Récupération des détails du critère avec path et catégorie
-    const critere = await prisma.critere.findUnique({
-      where: { id: critereId }
-    })
+    let critere = null
+    let isInterestCheck = false
     
-    if (!critere) {
-      return NextResponse.json({ error: 'Critère non trouvé' }, { status: 404 })
+    // Vérifier si c'est une requête d'Interest Check (pas de critereId)
+    if (!critereId && directCritere) {
+      isInterestCheck = true
+      console.log(`📋 Requête Interest Check: ${directCritere}`)
+      console.log(`📂 Type: Interest Check (recherche directe)`)
+      console.log(`🏷️ Query: ${directCritere}`)
+      
+      // Pour les Interest Checks, on utilise des mots-clés génériques
+      const contextKeywords = ['general', 'interest', 'audience']
+    } else {
+      // Récupération des détails du critère avec path et catégorie (pour les projets)
+      critere = await prisma.critere.findUnique({
+        where: { id: critereId }
+      })
+      
+      if (!critere) {
+        return NextResponse.json({ error: 'Critère non trouvé' }, { status: 404 })
+      }
+      
+      console.log(`📋 Critère trouvé: ${critere.label}`)
+      console.log(`📂 CategoryPath: [${critere.categoryPath.join(' > ')}]`)
+      console.log(`🏷️ Category: ${critere.category}`)
+      
+      // Suppression des anciennes suggestions (seulement pour les projets)
+      await prisma.suggestionFacebook.deleteMany({
+        where: { critereId }
+      })
     }
     
-    console.log(`📋 Critère trouvé: ${critere.label}`)
-    console.log(`📂 CategoryPath: [${critere.categoryPath.join(' > ')}]`)
-    console.log(`🏷️ Category: ${critere.category}`)
-    
-    // Suppression des anciennes suggestions
-    await prisma.suggestionFacebook.deleteMany({
-      where: { critereId }
-    })
-    
     // Recherche des nouvelles suggestions avec algorithme contextuel
+    const searchQuery = query || directCritere
     const facebookResult = await fetchFacebookSuggestionsWithRetry(
-      query,
+      searchQuery,
       country,
       AccessToken!,
       logType,
-      { slug: projectSlug, id: projectId }
+      { slug: projectSlug || interestCheckSlug, id: projectId || interestCheckId }
     )
     
     if (!facebookResult.success) {
@@ -782,7 +799,14 @@ export async function POST(request: NextRequest) {
     const allSuggestions = facebookResult.data || []
     
     // TRAITEMENT COMPLET DES SCORES POUR CHAQUE SUGGESTION
-    const contextKeywords = getContextualKeywords(critere.categoryPath, critere.category)
+    let contextKeywords: string[]
+    if (isInterestCheck) {
+      // Pour les Interest Checks, utiliser des mots-clés génériques
+      contextKeywords = ['general', 'interest', 'audience', 'brand', 'company']
+    } else {
+      // Pour les projets, utiliser les mots-clés contextuels
+      contextKeywords = getContextualKeywords(critere!.categoryPath, critere!.category)
+    }
     console.log(`📊 Analyse contextuelle avec mots-clés: [${contextKeywords.join(', ')}]`)
     
     const processedSuggestions: FacebookSuggestion[] = allSuggestions.map((item: any) => {
@@ -792,10 +816,10 @@ export async function POST(request: NextRequest) {
       const averageAudience = Math.round((audienceMin + audienceMax) / 2)
       
       // Calcul de tous les scores
-      const textualSimilarity = calculateTextualSimilarity(query, suggestionLabel)
+      const textualSimilarity = calculateTextualSimilarity(searchQuery, suggestionLabel)
       const contextualScore = calculateContextualScore(suggestionLabel, contextKeywords)
       const audienceScore = calculateAudienceScore(averageAudience)
-      const brandScore = calculateBrandScore(suggestionLabel, query, contextKeywords)
+      const brandScore = calculateBrandScore(suggestionLabel, searchQuery, contextKeywords)
       
       // Score d'intérêt basé sur le type de suggestion Facebook
       const interestTypeScore = item.disambiguation_category ? 0.1 : 0.05
@@ -839,19 +863,20 @@ export async function POST(request: NextRequest) {
       console.log('⚠️ Aucune suggestion trouvée')
       
       // Sauvegarder un marqueur pour indiquer que la requête a été effectuée
-      // même si aucune suggestion pertinente n'a été trouvée
-      await prisma.suggestionFacebook.create({
-        data: {
-          critereId,
-          label: `NO_SUGGESTIONS_${Date.now()}`, // Marqueur unique
-          audience: 0,
-          similarityScore: 0,
-          isBestMatch: false,
-          isSelectedByUser: false
-        }
-      })
-      
-      console.log('📝 Marqueur "aucune suggestion" sauvegardé pour tracking')
+      // seulement pour les projets (pas les Interest Checks)
+      if (!isInterestCheck && critereId) {
+        await prisma.suggestionFacebook.create({
+          data: {
+            critereId,
+            label: `NO_SUGGESTIONS_${Date.now()}`, // Marqueur unique
+            audience: 0,
+            similarityScore: 0,
+            isBestMatch: false,
+            isSelectedByUser: false
+          }
+        })
+        console.log('📝 Marqueur "aucune suggestion" sauvegardé pour tracking')
+      }
       
       return NextResponse.json({ 
         message: 'Aucune suggestion trouvée',
@@ -869,6 +894,47 @@ export async function POST(request: NextRequest) {
     
     console.log(`\n💾 SAUVEGARDE ${suggestions.length} SUGGESTIONS:`)
     
+    // Pour les Interest Checks, retourner directement les suggestions sans les sauvegarder
+    if (isInterestCheck) {
+      // Formater les suggestions pour les Interest Checks
+      const formattedSuggestions = suggestions.map(suggestion => ({
+        label: suggestion.label,
+        audience: suggestion.audience,
+        similarityScore: Math.round(suggestion.finalScore * 100),
+        isBestMatch: false,
+        isSelectedByUser: false
+      }))
+      
+      // Marquer le meilleur match
+      if (formattedSuggestions.length > 0) {
+        const bestIndex = suggestions.findIndex(s => s.finalScore === Math.max(...suggestions.map(sg => sg.finalScore)))
+        if (bestIndex >= 0) {
+          formattedSuggestions[bestIndex].isBestMatch = true
+          bestMatch = formattedSuggestions[bestIndex]
+        }
+      }
+      
+      // Statistiques finales
+      const relevantSuggestions = suggestions.filter(s => s.isRelevant)
+      const irrelevantSuggestions = suggestions.filter(s => !s.isRelevant)
+      
+      console.log(`\n🎉 PROCESSUS TERMINÉ (Interest Check):`)
+      console.log(`   ✅ ${relevantSuggestions.length} suggestions pertinentes`)
+      console.log(`   ❌ ${irrelevantSuggestions.length} suggestions non pertinentes`)
+      console.log(`   🎯 Meilleur match: ${bestMatch ? bestMatch.label : 'Aucun'}`)
+      
+      return NextResponse.json({ 
+        message: 'Suggestions trouvées avec succès',
+        suggestions: formattedSuggestions,
+        bestMatch: bestMatch?.label,
+        totalFound: formattedSuggestions.length,
+        relevantCount: relevantSuggestions.length,
+        irrelevantCount: irrelevantSuggestions.length,
+        qualityScore: relevantSuggestions.length > 0 ? Math.round((relevantSuggestions.length / suggestions.length) * 100) : 0
+      })
+    }
+    
+    // Pour les projets, sauvegarder en base comme avant
     for (const suggestion of suggestions) {
       const saved = await prisma.suggestionFacebook.create({
         data: {
@@ -927,7 +993,8 @@ export async function POST(request: NextRequest) {
     console.error('❌ Erreur lors de la recherche des suggestions Facebook:', error)
     return NextResponse.json({ 
       error: 'Erreur lors de la recherche des suggestions Facebook',
-      details: error instanceof Error ? error.message : 'Erreur inconnue'
+      suggestions: [],
+      totalFound: 0
     }, { status: 500 })
   }
 }

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useSession, signOut } from 'next-auth/react'
-import { Folder, Database, User, LogOut, LogIn, Settings, MessageSquare, FileSearch2, Plus } from 'lucide-react'
+import { Folder, Database, User, LogOut, LogIn, Settings, MessageSquare, FileSearch2, Plus, FileCheck } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -58,6 +58,13 @@ export function AppSidebar() {
               <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
                 <Link href="/categories" data-cy="sidebar-categories">
                   <Database className="mr-3 h-5 w-5" /> Categories
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
+                <Link href="/interests-check" data-cy="sidebar-interests-check">
+                  <FileCheck className="mr-3 h-5 w-5" /> Interests Check
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
