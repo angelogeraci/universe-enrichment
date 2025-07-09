@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import OpenAI from 'openai'
 import { prisma } from '@/lib/prisma'
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+import { callAIModel } from '@/lib/ai-client'
+import { isAnthropicModel } from '@/lib/anthropic-models'
 
 // Fonction pour convertir les codes pays en noms complets anglais
 function getCountryFullName(countryCode: string): string {
@@ -118,29 +117,30 @@ export async function POST (req: NextRequest) {
     const fullPrompt = userPrompt + OUTPUT_FORMAT_INSTRUCTION
     
     console.log('📝 PROMPT UTILISATEUR:', userPrompt)
-    console.log('📝 PROMPT COMPLET ENVOYÉ À OPENAI:', fullPrompt)
+    console.log('📝 PROMPT COMPLET ENVOYÉ À L\'IA:', fullPrompt)
     
     // Récupère le modèle à utiliser depuis le prompt template
     const modelToUse = promptTemplate.model || 'gpt-4o'
-    console.log('🤖 MODÈLE OPENAI SÉLECTIONNÉ:', modelToUse)
+    console.log(`🤖 MODÈLE ${isAnthropicModel(modelToUse) ? 'ANTHROPIC' : 'OPENAI'} SÉLECTIONNÉ:`, modelToUse)
     
-    console.log('🤖 APPEL OPENAI EN COURS...')
+    console.log(`🤖 APPEL ${isAnthropicModel(modelToUse) ? 'ANTHROPIC' : 'OPENAI'} EN COURS...`)
     
-    // Appel OpenAI avec le modèle spécifié
-    const completion = await openai.chat.completions.create({
+    // Appel unifié avec le modèle spécifié
+    const aiResponse = await callAIModel({
       model: modelToUse,
       messages: [
         { role: 'system', content: 'Tu es un assistant marketing expert. Tu suis scrupuleusement les instructions de format.' },
         { role: 'user', content: fullPrompt }
-      ]
+      ],
+      thinking: isAnthropicModel(modelToUse) // Activer thinking pour Claude
     })
     
-    console.log('🤖 OPENAI RÉPONSE REÇUE')
+    console.log(`🤖 ${isAnthropicModel(modelToUse) ? 'ANTHROPIC' : 'OPENAI'} RÉPONSE REÇUE`)
     const processingTime = Date.now() - startTime
     
     // Extraction du JSON dans la réponse
-    const content = completion.choices[0]?.message?.content || ''
-    console.log('RÉPONSE BRUTE OPENAI:', content)
+    const content = aiResponse.content
+    console.log(`RÉPONSE BRUTE ${isAnthropicModel(modelToUse) ? 'ANTHROPIC' : 'OPENAI'}:`, content)
 
     // Supprimer le log précédent et créer un nouveau log
     try {
@@ -222,7 +222,7 @@ export async function POST (req: NextRequest) {
     
     if (!criteria) {
       console.log('❌ CRITÈRES NON CONFORMES')
-      return NextResponse.json({ error: 'Réponse OpenAI non conforme', raw: content }, { status: 500 })
+      return NextResponse.json({ error: `Réponse ${isAnthropicModel(modelToUse) ? 'Anthropic' : 'OpenAI'} non conforme`, raw: content }, { status: 500 })
     }
     
     // Transformer les strings en objets si nécessaire

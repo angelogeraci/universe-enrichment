@@ -5,6 +5,7 @@ import { Textarea } from './ui/textarea'
 import { Button } from './ui/button'
 import { useToast } from '@/hooks/useToast'
 import { OPENAI_MODELS, getModelsByCategory, type OpenAIModel } from '@/lib/openai-models'
+import { ANTHROPIC_MODELS, getAnthropicModelsByCategory, type AnthropicModel } from '@/lib/anthropic-models'
 
 type Prompt = {
   id: string
@@ -32,11 +33,19 @@ export default function PromptAdminEditor () {
   const [saving, setSaving] = useState<string | null>(null)
   const { success, error: showError, info } = useToast()
 
-  // Organise les modèles par nouvelles catégories
-  const modelsByCategory = {
-    'GPT-4': OPENAI_MODELS.filter(m => m.category === 'GPT-4'),
-    'Reasoning': OPENAI_MODELS.filter(m => m.category === 'Reasoning'),
-    'GPT-3.5': OPENAI_MODELS.filter(m => m.category === 'GPT-3.5'),
+  // Organise TOUS les modèles (OpenAI + Anthropic) par catégories
+  const allModelsByCategory = {
+    // Modèles Anthropic Claude
+    'Claude-4': getAnthropicModelsByCategory('Claude-4'),
+    'Claude-3.5': getAnthropicModelsByCategory('Claude-3.5'),
+    'Claude-3': getAnthropicModelsByCategory('Claude-3'),
+    'Claude-Reasoning': getAnthropicModelsByCategory('Reasoning'),
+    
+    // Modèles OpenAI
+    'GPT-4': getModelsByCategory('GPT-4'),
+    'OpenAI-Reasoning': getModelsByCategory('Reasoning'),
+    'GPT-3.5': getModelsByCategory('GPT-3.5'),
+    
     // Garde compatibilité avec anciens modèles
     'legacy': OPENAI_MODELS.filter(m => m.category === 'legacy'),
     'standard': OPENAI_MODELS.filter(m => m.category === 'standard')
@@ -128,8 +137,19 @@ export default function PromptAdminEditor () {
   }
 
   const getModelDescription = (modelId: string) => {
-    const model = OPENAI_MODELS.find(m => m.id === modelId)
-    return model ? model.description : 'Modèle inconnu'
+    // Chercher dans les modèles OpenAI d'abord
+    const openaiModel = OPENAI_MODELS.find(m => m.id === modelId)
+    if (openaiModel) return openaiModel.description
+    
+    // Chercher dans les modèles Anthropic
+    const anthropicModel = ANTHROPIC_MODELS.find(m => m.id === modelId)
+    if (anthropicModel) return anthropicModel.description
+    
+    return 'Modèle inconnu'
+  }
+
+  const isAnthropicModel = (modelId: string): boolean => {
+    return ANTHROPIC_MODELS.some(m => m.id === modelId)
   }
 
   if (loading) return <div>Chargement des prompts...</div>
@@ -162,39 +182,78 @@ export default function PromptAdminEditor () {
             </div>
 
             <div>
-              <label className="block font-medium mb-1">Modèle OpenAI</label>
+              <label className="block font-medium mb-1">Modèle IA</label>
               <select 
                 value={prompt.model || 'gpt-4o'} 
                 onChange={(e) => handleModelChange(prompt.id, e)}
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <optgroup label="🚀 GPT-4 (2025)">
-                  {modelsByCategory['GPT-4'].map((model) => (
+                {/* Modèles Anthropic Claude */}
+                <optgroup label="🔮 Claude 4 (2025) - Anthropic">
+                  {allModelsByCategory['Claude-4'].map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} {model.id === 'claude-4-sonnet-20250522' ? '⭐ Dernier' : ''}
+                    </option>
+                  ))}
+                </optgroup>
+
+                <optgroup label="🧠 Claude 3.5 (2024-2025) - Anthropic">
+                  {allModelsByCategory['Claude-3.5'].map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} {model.id === 'claude-3-5-sonnet-20241022' ? '⭐ Recommandé' : ''}
+                    </option>
+                  ))}
+                </optgroup>
+
+                <optgroup label="💭 Claude Raisonnement - Anthropic">
+                  {allModelsByCategory['Claude-Reasoning'].map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} (Thinking)
+                    </option>
+                  ))}
+                </optgroup>
+
+                <optgroup label="📚 Claude 3 Classic - Anthropic">
+                  {allModelsByCategory['Claude-3'].map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </optgroup>
+                
+                {/* Séparateur visuel */}
+                <optgroup label="━━━━━━━━━━━━━━━━━━━━━━━">
+                  <option disabled>Modèles OpenAI</option>
+                </optgroup>
+                
+                {/* Modèles OpenAI */}
+                <optgroup label="🚀 GPT-4 (2025) - OpenAI">
+                  {allModelsByCategory['GPT-4'].map((model) => (
                     <option key={model.id} value={model.id}>
                       {model.name} {model.id === 'gpt-4o' ? '⭐ Recommandé' : ''}
                     </option>
                   ))}
                 </optgroup>
                 
-                <optgroup label="🧠 Modèles de Raisonnement">
-                  {modelsByCategory['Reasoning'].map((model) => (
+                <optgroup label="🧠 OpenAI Raisonnement">
+                  {allModelsByCategory['OpenAI-Reasoning'].map((model) => (
                     <option key={model.id} value={model.id}>
                       {model.name}
                     </option>
                   ))}
                 </optgroup>
                 
-                <optgroup label="⚡ GPT-3.5">
-                  {modelsByCategory['GPT-3.5'].map((model) => (
+                <optgroup label="⚡ GPT-3.5 - OpenAI">
+                  {allModelsByCategory['GPT-3.5'].map((model) => (
                     <option key={model.id} value={model.id}>
                       {model.name}
                     </option>
                   ))}
                 </optgroup>
                 
-                {modelsByCategory['standard'] && modelsByCategory['standard'].length > 0 && (
+                {allModelsByCategory['standard'] && allModelsByCategory['standard'].length > 0 && (
                   <optgroup label="🔧 Standards">
-                    {modelsByCategory['standard'].map((model) => (
+                    {allModelsByCategory['standard'].map((model) => (
                       <option key={model.id} value={model.id}>
                         {model.name}
                       </option>
@@ -202,9 +261,9 @@ export default function PromptAdminEditor () {
                   </optgroup>
                 )}
                 
-                {modelsByCategory['legacy'] && modelsByCategory['legacy'].length > 0 && (
+                {allModelsByCategory['legacy'] && allModelsByCategory['legacy'].length > 0 && (
                   <optgroup label="📜 Classiques">
-                    {modelsByCategory['legacy'].map((model) => (
+                    {allModelsByCategory['legacy'].map((model) => (
                       <option key={model.id} value={model.id}>
                         {model.name}
                       </option>
@@ -212,9 +271,19 @@ export default function PromptAdminEditor () {
                   </optgroup>
                 )}
               </select>
-              <p className="text-xs text-gray-600 mt-1">
+              <div className="text-xs text-gray-600 mt-1">
                 <strong>Sélectionné:</strong> {getModelDescription(prompt.model || 'gpt-4o')}
-              </p>
+                {isAnthropicModel(prompt.model || 'gpt-4o') && 
+                  <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">
+                    🔮 Anthropic Claude
+                  </span>
+                }
+                {!isAnthropicModel(prompt.model || 'gpt-4o') && 
+                  <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 rounded text-xs">
+                    🤖 OpenAI
+                  </span>
+                }
+              </div>
             </div>
             
             <div>
@@ -256,10 +325,10 @@ export default function PromptAdminEditor () {
       <div className="border-t pt-6">
         <div className="bg-gray-50 p-4 rounded-lg">
           <h3 className="font-semibold text-lg mb-3 text-gray-800">
-            📋 Format de Sortie OpenAI (Non Modifiable)
+            📋 Format de Sortie IA (Non Modifiable)
           </h3>
           <p className="text-sm text-gray-600 mb-3">
-            Cette instruction est automatiquement ajoutée à vos prompts pour assurer la cohérence du format de réponse:
+            Cette instruction est automatiquement ajoutée à vos prompts pour assurer la cohérence du format de réponse avec <strong>tous les modèles</strong> (OpenAI et Anthropic):
           </p>
           <Textarea 
             value={OUTPUT_FORMAT_INSTRUCTION}
@@ -270,7 +339,7 @@ export default function PromptAdminEditor () {
           <div className="mt-3 p-2 bg-blue-50 rounded border-l-4 border-blue-400">
             <p className="text-sm text-blue-800">
               <strong>ℹ️ Information:</strong> Cette partie est automatiquement combinée avec vos templates 
-              lors de l'envoi à OpenAI pour garantir un format de réponse cohérent.
+              lors de l'envoi aux modèles IA (OpenAI GPT et Anthropic Claude) pour garantir un format de réponse cohérent.
             </p>
           </div>
         </div>
