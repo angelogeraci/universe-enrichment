@@ -109,6 +109,7 @@ model InterestSuggestion {
   interest        Interest @relation(fields: [interestId], references: [id])
   interestId      String
   label           String
+  facebookId      String?  // ID Facebook de l'intérêt
   audience        Int
   similarityScore Float
   isBestMatch     Boolean  @default(false)
@@ -150,6 +151,7 @@ model SuggestionFacebook {
   critere         Critere  @relation(fields: [critereId], references: [id])
   critereId       String
   label           String
+  facebookId      String?  // ID Facebook de l'intérêt
   audience        Int
   similarityScore Float
   isBestMatch     Boolean  @default(false)

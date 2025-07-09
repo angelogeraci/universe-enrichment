@@ -30,6 +30,7 @@ const BRAND_INDICATORS = {
 // Interface pour typer les suggestions avec scoring détaillé
 interface FacebookSuggestion {
   label: string
+  facebookId?: string  // ✅ AJOUT DE L'ID FACEBOOK
   audience: number
   textualSimilarity: number
   contextualScore: number
@@ -811,6 +812,7 @@ export async function POST(request: NextRequest) {
     
     const processedSuggestions: FacebookSuggestion[] = allSuggestions.map((item: any) => {
       const suggestionLabel = item.name
+      const facebookId = item.id || null  // ✅ EXTRACTION DE L'ID FACEBOOK
       const audienceMin = item.audience_size_lower_bound || 0
       const audienceMax = item.audience_size_upper_bound || audienceMin
       const averageAudience = Math.round((audienceMin + audienceMax) / 2)
@@ -839,10 +841,11 @@ export async function POST(request: NextRequest) {
       // Raison du matching pour debugging
       const matchingReason = `Textuel: ${(textualSimilarity * 100).toFixed(1)}%, Contexte: ${(contextualScore * 100).toFixed(1)}%, Audience: ${(audienceScore * 100).toFixed(1)}%, Marque: ${(brandScore * 100).toFixed(1)}%`
       
-      console.log(`📈 "${suggestionLabel}": Score final ${(finalScore * 100).toFixed(1)}% (${relevanceData.level}) - ${matchingReason}`)
+      console.log(`📈 "${suggestionLabel}" (ID: ${facebookId}): Score final ${(finalScore * 100).toFixed(1)}% (${relevanceData.level}) - ${matchingReason}`)
       
       return {
         label: suggestionLabel,
+        facebookId: facebookId, // ✅ AJOUT DE L'ID FACEBOOK
         audience: averageAudience,
         textualSimilarity,
         contextualScore,
@@ -869,6 +872,7 @@ export async function POST(request: NextRequest) {
           data: {
             critereId,
             label: `NO_SUGGESTIONS_${Date.now()}`, // Marqueur unique
+            facebookId: null, // ✅ AJOUT DU CHAMP FACEBOOK_ID NULL
             audience: 0,
             similarityScore: 0,
             isBestMatch: false,
@@ -899,6 +903,7 @@ export async function POST(request: NextRequest) {
       // Formater les suggestions pour les Interest Checks
       const formattedSuggestions = suggestions.map(suggestion => ({
         label: suggestion.label,
+        facebookId: suggestion.facebookId, // ✅ AJOUT DE L'ID FACEBOOK
         audience: suggestion.audience,
         similarityScore: Math.round(suggestion.finalScore * 100),
         isBestMatch: false,
@@ -940,6 +945,7 @@ export async function POST(request: NextRequest) {
         data: {
           critereId,
           label: suggestion.label,
+          facebookId: suggestion.facebookId, // ✅ AJOUT DE L'ID FACEBOOK
           audience: suggestion.audience,
           similarityScore: Math.round(suggestion.finalScore * 100),
           isBestMatch: false,
@@ -956,7 +962,8 @@ export async function POST(request: NextRequest) {
       
       const relevanceIcon = suggestion.isRelevant ? '✅' : '❌'
       const relevanceNote = suggestion.isRelevant ? '' : ' (NON PERTINENTE)'
-      console.log(`${relevanceIcon} ${suggestion.label}: ${suggestion.audience.toLocaleString()} personnes (${Math.round(suggestion.finalScore * 100)}% - ${suggestion.relevanceLevel})${relevanceNote}`)
+      const facebookIdNote = suggestion.facebookId ? ` (ID: ${suggestion.facebookId})` : ' (ID: N/A)'
+      console.log(`${relevanceIcon} ${suggestion.label}${facebookIdNote}: ${suggestion.audience.toLocaleString()} personnes (${Math.round(suggestion.finalScore * 100)}% - ${suggestion.relevanceLevel})${relevanceNote}`)
     }
     
     // Marquer le meilleur match pertinent

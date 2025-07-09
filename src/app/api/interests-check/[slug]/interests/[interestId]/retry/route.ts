@@ -101,6 +101,7 @@ async function processSingleInterest(interest: any, interestCheck: any, slug: st
         const suggestions = facebookData.suggestions.map((suggestion: any) => ({
           interestId: interest.id,
           label: suggestion.label,
+          facebookId: suggestion.facebookId, // ✅ AJOUT DE L'ID FACEBOOK
           audience: suggestion.audience,
           similarityScore: suggestion.similarityScore || 0,
           isBestMatch: suggestion.isBestMatch || false,

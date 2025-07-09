@@ -53,6 +53,7 @@ export async function GET(
       suggestions: interest.suggestions.map((suggestion: any) => ({
         id: suggestion.id,
         label: suggestion.label,
+        facebookId: suggestion.facebookId, // ✅ AJOUT DE L'ID FACEBOOK
         audience: Number(suggestion.audience),
         similarityScore: Number(suggestion.similarityScore),
         isBestMatch: suggestion.isBestMatch,

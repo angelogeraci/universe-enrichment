@@ -66,6 +66,45 @@ async function enrichInterests(interestCheckId: string, slug: string, country: s
   try {
     console.log(`🎯 DÉBUT ENRICHISSEMENT Interest Check: ${slug}`)
 
+    // DÉTECTION DES INTÉRÊTS BLOQUÉS - Vérifier s'il y a des intérêts bloqués depuis plus de 10 minutes
+    const stuckInterests = await prisma.interest.findMany({
+      where: {
+        interestCheckId,
+        status: 'in_progress',
+        updatedAt: {
+          lt: new Date(Date.now() - 10 * 60 * 1000) // Plus de 10 minutes
+        }
+      }
+    })
+
+    if (stuckInterests.length > 0) {
+      console.log(`🔧 DÉBLOCAGE: ${stuckInterests.length} intérêts bloqués détectés`)
+      
+      // Remettre les intérêts bloqués en "retry"
+      await prisma.interest.updateMany({
+        where: { 
+          id: { in: stuckInterests.map(i => i.id) }
+        },
+        data: { status: 'retry' }
+      })
+
+      // Remettre l'Interest Check en "pending" s'il était en "in_progress"
+      const interestCheck = await prisma.interestCheck.findUnique({
+        where: { id: interestCheckId }
+      })
+      
+      if (interestCheck?.enrichmentStatus === 'in_progress') {
+        await prisma.interestCheck.update({
+          where: { id: interestCheckId },
+          data: { 
+            enrichmentStatus: 'pending',
+            updatedAt: new Date()
+          }
+        })
+        console.log(`🔧 Interest Check remis en "pending" après déblocage`)
+      }
+    }
+
     // Get all interests for this check
     const interests = await prisma.interest.findMany({
       where: { 
@@ -145,6 +184,7 @@ async function enrichInterests(interestCheckId: string, slug: string, country: s
             const suggestions = facebookData.suggestions.map((suggestion: any) => ({
               interestId: interest.id,
               label: suggestion.label,
+              facebookId: suggestion.facebookId, // ✅ AJOUT DE L'ID FACEBOOK
               audience: suggestion.audience,
               similarityScore: suggestion.similarityScore || 0,
               isBestMatch: suggestion.isBestMatch || false,
