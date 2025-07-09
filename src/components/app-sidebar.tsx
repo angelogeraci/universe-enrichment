@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useSession, signOut } from 'next-auth/react'
-import { Folder, Database, User, LogOut, LogIn, Settings, MessageSquare, FileSearch2, Plus, FileCheck } from 'lucide-react'
+import { Folder, Database, User, LogOut, LogIn, Settings, MessageSquare, FileSearch2, Plus, FileCheck, BarChart3, Facebook } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -85,8 +85,8 @@ export function AppSidebar() {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
-                  <Link href="/admin/logs" data-cy="sidebar-admin-logs">
-                    <FileSearch2 className="mr-3 h-5 w-5" /> Logs
+                  <Link href="/admin/performance" data-cy="sidebar-admin-performance">
+                    <BarChart3 className="mr-3 h-5 w-5" /> Performance
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -101,6 +101,25 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
                   <Link href="/admin/users" data-cy="sidebar-admin-users">
                     <User className="mr-3 h-5 w-5" /> Users
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+
+            {/* Section Logs - Séparée pour les admins */}
+            <div className="mt-6 mb-1 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Logs</div>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
+                  <Link href="/admin/logs" data-cy="sidebar-admin-logs">
+                    <FileSearch2 className="mr-3 h-5 w-5" /> Application Logs
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={false} className="text-gray-900 font-medium text-base hover:bg-gray-300 hover:text-black focus:bg-gray-400 focus:text-black">
+                  <Link href="/admin/facebook-logs" data-cy="sidebar-admin-facebook-logs">
+                    <Facebook className="mr-3 h-5 w-5" /> Facebook Logs
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
