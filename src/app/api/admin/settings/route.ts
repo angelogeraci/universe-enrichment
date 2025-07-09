@@ -19,10 +19,12 @@ export async function GET() {
   return NextResponse.json(result)
 }
 
-export async function PUT(req: NextRequest) {
-  const body = await req.json()
+async function updateSettings(body: any) {
   const updates = Object.entries(body).filter(([key]) => ALLOWED_KEYS.includes(key))
   const results: Record<string, string> = {}
+  
+  console.log('🔧 SETTINGS UPDATE:', updates)
+  
   for (const [key, value] of updates) {
     const updated = await prisma.appSetting.upsert({
       where: { key },
@@ -30,6 +32,18 @@ export async function PUT(req: NextRequest) {
       create: { key, value: String(value) }
     })
     results[key] = updated.value
+    console.log(`✅ Setting ${key} = ${updated.value}`)
   }
+  
   return NextResponse.json(results)
+}
+
+export async function PUT(req: NextRequest) {
+  const body = await req.json()
+  return updateSettings(body)
+}
+
+export async function POST(req: NextRequest) {
+  const body = await req.json()
+  return updateSettings(body)
 } 

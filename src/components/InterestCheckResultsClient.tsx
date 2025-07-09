@@ -50,6 +50,7 @@ type EnrichmentStatus = 'pending' | 'in_progress' | 'paused' | 'cancelled' | 'do
 interface InterestSuggestion {
   id: string
   label: string
+  facebookId?: string // Ajout de l'ID Facebook
   audience: number
   similarityScore: number
   isBestMatch: boolean
@@ -413,6 +414,7 @@ export function InterestCheckResultsClient({
       'Country',
       'Status',
       'Selected Suggestion',
+      'Selected Facebook ID',
       'Selected Audience',
       'Selected Score',
       'All Suggestions'
@@ -425,9 +427,10 @@ export function InterestCheckResultsClient({
         interest.country,
         interest.status,
         selected ? selected.label : '',
+        selected ? selected.facebookId || '' : '', // ID Facebook de la suggestion sélectionnée
         selected ? selected.audience : '',
         selected ? selected.similarityScore : '',
-        interest.suggestions.map(s => `${s.label} (${s.audience}, ${s.similarityScore}%)${s.isBestMatch ? ' [Best]' : ''}${s.isSelectedByUser ? ' [Selected]' : ''}`).join('; ')
+        interest.suggestions.map(s => `${s.label} (ID: ${s.facebookId || 'N/A'}, ${s.audience}, ${s.similarityScore}%)${s.isBestMatch ? ' [Best]' : ''}${s.isSelectedByUser ? ' [Selected]' : ''}`).join('; ')
       ]
     })
     const ws = XLSX.utils.aoa_to_sheet([header, ...rows])

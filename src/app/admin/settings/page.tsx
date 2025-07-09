@@ -87,9 +87,9 @@ const AdminSettingsPage = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>API Facebook</CardTitle>
+          <CardTitle>API Facebook - Optimisation des performances</CardTitle>
           <CardDescription>
-            Configuration pour l'enrichissement des données via Facebook.
+            Configuration pour l'enrichissement des données via Facebook. Optimisez ces paramètres selon votre plan Facebook API.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -103,6 +103,12 @@ const AdminSettingsPage = () => {
                 onChange={handleChange}
                 placeholder="Ex: 50"
               />
+              <p className="text-sm text-gray-600">
+                📊 <strong>Recommandé:</strong><br/>
+                • <strong>Standard Access (App Review):</strong> 100-200 requêtes<br/>
+                • <strong>Development:</strong> 25-50 requêtes<br/>
+                • Plus élevé = plus rapide mais risque rate limit
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="facebookPauseMs">Pause entre les lots (ms)</Label>
@@ -113,8 +119,25 @@ const AdminSettingsPage = () => {
                 onChange={handleChange}
                 placeholder="Ex: 1000"
               />
+              <p className="text-sm text-gray-600">
+                ⏱️ <strong>Recommandé:</strong><br/>
+                • <strong>Standard Access:</strong> 1000-2000ms (1-2s)<br/>
+                • <strong>Development:</strong> 3000-5000ms (3-5s)<br/>
+                • Plus bas = plus rapide mais risque rate limit
+              </p>
             </div>
           </div>
+          
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h4 className="font-semibold text-blue-800 mb-2">💡 Stratégies d'accélération</h4>
+            <ul className="text-sm text-blue-700 space-y-1">
+              <li>• <strong>Parallélisation:</strong> Utilisez plusieurs comptes ad Facebook</li>
+              <li>• <strong>Mise à niveau:</strong> Demandez Advanced Access (Ads Management)</li>
+              <li>• <strong>Optimisation requêtes:</strong> Filtrez les critères pour éviter les doublons</li>
+              <li>• <strong>Cache intelligent:</strong> Réutilisez les suggestions déjà trouvées</li>
+            </ul>
+          </div>
+          
           <Separator />
           <div className="space-y-2">
             <Label htmlFor="facebookRelevanceScoreThreshold">
@@ -130,6 +153,19 @@ const AdminSettingsPage = () => {
               onChange={handleChange}
               placeholder="Ex: 0.5"
             />
+            <p className="text-sm text-gray-600">
+              🎯 Plus bas = plus de suggestions (mais moins pertinentes)
+            </p>
+          </div>
+          
+          <div className="bg-amber-50 p-4 rounded-lg">
+            <h4 className="font-semibold text-amber-800 mb-2">⚡ Configuration Rapide Recommandée</h4>
+            <div className="text-sm text-amber-700 space-y-2">
+              <p><strong>Pour Development Access (par défaut):</strong></p>
+              <p>• Batch Size: 25-30 • Pause: 3000ms • Pertinence: 0.3</p>
+              <p><strong>Pour Standard Access (après App Review):</strong></p>
+              <p>• Batch Size: 100-150 • Pause: 1000ms • Pertinence: 0.3</p>
+            </div>
           </div>
         </CardContent>
       </Card>

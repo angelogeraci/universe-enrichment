@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/prisma"
@@ -15,107 +9,102 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  role      Role     @default(user)
-  categoryLists CategoryList[]        @relation("OwnerCategoryLists")
+  id                  String          @id @default(cuid())
+  email               String          @unique
+  password            String
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  role                Role            @default(user)
+  categoryLists       CategoryList[]  @relation("OwnerCategoryLists")
+  interestChecks      InterestCheck[]
+  projects            Project[]
   sharedCategoryLists CategoryList[]  @relation("SharedCategoryLists")
-  projects  Project[]
-  interestChecks InterestCheck[]
-}
-
-enum Role {
-  admin
-  user
 }
 
 model CategoryList {
-  id          String      @id @default(cuid())
-  name        String
-  slug        String      @unique
-  createdAt   DateTime    @default(now())
-  isPublic    Boolean     @default(false)
-  owner       User        @relation("OwnerCategoryLists", fields: [ownerId], references: [id])
-  ownerId     String
-  sharedWith  User[]      @relation("SharedCategoryLists")
-  categories  Category[]
-  projects    Project[]
+  id         String     @id @default(cuid())
+  name       String
+  createdAt  DateTime   @default(now())
+  isPublic   Boolean    @default(false)
+  ownerId    String
+  slug       String     @unique
+  categories Category[]
+  owner      User       @relation("OwnerCategoryLists", fields: [ownerId], references: [id])
+  projects   Project[]
+  sharedWith User[]     @relation("SharedCategoryLists")
 }
 
 model Category {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   name           String
   path           String
   andCriteria    String[]
-  categoryList   CategoryList @relation(fields: [categoryListId], references: [id])
   categoryListId String
+  categoryList   CategoryList @relation(fields: [categoryListId], references: [id])
 }
 
 model Project {
-  id            String   @id @default(cuid())
-  name          String
-  slug          String   @unique
-  description   String
-  country       String
-  searchType    String
-  categoryList  CategoryList @relation(fields: [categoryListId], references: [id])
-  categoryListId String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  owner         User     @relation(fields: [ownerId], references: [id])
-  ownerId       String
-  criteres      Critere[]
-  enrichmentStatus String @default("pending") // "pending", "processing", "paused", "cancelled", "done", "error"
-  currentCategoryIndex Int? @default(0) // Index de la catégorie en cours de traitement
-  pausedAt      DateTime? // Date/heure de mise en pause
+  id                   String       @id @default(cuid())
+  name                 String
+  description          String
+  country              String
+  searchType           String
+  categoryListId       String
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  ownerId              String
+  slug                 String       @unique
+  enrichmentStatus     String       @default("pending")
+  currentCategoryIndex Int?         @default(0)
+  pausedAt             DateTime?
+  criteres             Critere[]
+  categoryList         CategoryList @relation(fields: [categoryListId], references: [id])
+  owner                User         @relation(fields: [ownerId], references: [id])
 }
 
 model InterestCheck {
-  id            String   @id @default(cuid())
-  name          String
-  slug          String   @unique
-  description   String?
-  country       String   @default("BE")
-  fileName      String   // Nom du fichier Excel uploadé
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  owner         User     @relation(fields: [ownerId], references: [id])
-  ownerId       String
-  interests     Interest[]
-  enrichmentStatus String @default("pending") // "pending", "processing", "paused", "cancelled", "done", "error"
-  currentInterestIndex Int? @default(0) // Index de l'intérêt en cours de traitement
-  pausedAt      DateTime? // Date/heure de mise en pause
+  id                   String     @id @default(cuid())
+  name                 String
+  slug                 String     @unique
+  description          String?
+  country              String     @default("BE")
+  fileName             String
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+  ownerId              String
+  enrichmentStatus     String     @default("pending")
+  currentInterestIndex Int?       @default(0)
+  pausedAt             DateTime?
+  interests            Interest[]
+  owner                User       @relation(fields: [ownerId], references: [id])
 }
 
 model Interest {
-  id            String   @id @default(cuid())
-  interestCheck InterestCheck @relation(fields: [interestCheckId], references: [id])
-  interestCheckId String
-  name          String   // Le nom depuis le fichier Excel
-  country       String
-  status        String   @default("pending")
-  note          String?
-  suggestions   InterestSuggestion[]
+  id                   String               @id @default(cuid())
+  interestCheckId      String
+  name                 String
+  country              String
+  status               String               @default("pending")
+  note                 String?
   selectedSuggestionId String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  interestCheck        InterestCheck        @relation(fields: [interestCheckId], references: [id])
+  suggestions          InterestSuggestion[]
 }
 
 model InterestSuggestion {
-  id              String   @id @default(cuid())
-  interest        Interest @relation(fields: [interestId], references: [id])
-  interestId      String
-  label           String
-  facebookId      String?  // ID Facebook de l'intérêt
-  audience        Int
-  similarityScore Float
-  isBestMatch     Boolean  @default(false)
-  isSelectedByUser Boolean @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default(cuid())
+  interestId       String
+  label            String
+  facebookId       String?
+  audience         Int
+  similarityScore  Float
+  isBestMatch      Boolean  @default(false)
+  isSelectedByUser Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  interest         Interest @relation(fields: [interestId], references: [id])
 }
 
 model PromptTemplate {
@@ -123,60 +112,74 @@ model PromptTemplate {
   label       String
   template    String
   description String?
-  searchType  String?  // "origin" ou "presence" 
-  model       String?  @default("gpt-4o") // Modèle OpenAI à utiliser
   isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  searchType  String?
+  model       String?  @default("gpt-4o")
+}
+
+model Critere {
+  id                   String               @id @default(cuid())
+  projectId            String
+  category             String
+  categoryPath         String[]
+  country              String
+  label                String
+  status               String
+  note                 String?
+  selectedSuggestionId String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  project              Project              @relation(fields: [projectId], references: [id])
+  suggestions          SuggestionFacebook[]
+}
+
+model SuggestionFacebook {
+  id               String   @id @default(cuid())
+  critereId        String
+  label            String
+  audience         Int
+  similarityScore  Float
+  isBestMatch      Boolean  @default(false)
+  isSelectedByUser Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  facebookId       String?
+  critere          Critere  @relation(fields: [critereId], references: [id])
+}
+
+model EnrichmentLog {
+  id             String   @id @default(cuid())
+  projectId      String
+  projectName    String
+  category       String
+  country        String
+  searchType     String
+  model          String
+  promptSent     String
+  responseRaw    String
+  responseStatus String
+  processingTime Int
+  createdAt      DateTime @default(now())
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model FacebookSuggestionCache {
+  id          String   @id @default(cuid())
+  cacheKey    String   @unique
+  suggestions String   // JSON des suggestions
+  country     String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
-model Critere {
-  id            String   @id @default(cuid())
-  project       Project  @relation(fields: [projectId], references: [id])
-  projectId     String
-  category      String
-  categoryPath  String[]
-  country       String
-  label         String
-  status        String
-  note          String?
-  suggestions   SuggestionFacebook[]
-  selectedSuggestionId String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-
-model SuggestionFacebook {
-  id              String   @id @default(cuid())
-  critere         Critere  @relation(fields: [critereId], references: [id])
-  critereId       String
-  label           String
-  facebookId      String?  // ID Facebook de l'intérêt
-  audience        Int
-  similarityScore Float
-  isBestMatch     Boolean  @default(false)
-  isSelectedByUser Boolean @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-}
-
-model EnrichmentLog {
-  id               String   @id @default(cuid())
-  projectId        String
-  projectName      String
-  category         String
-  country          String
-  searchType       String
-  model            String
-  promptSent       String   // Le prompt complet envoyé à OpenAI
-  responseRaw      String   // La réponse brute d'OpenAI
-  responseStatus   String   // "success" ou "error"
-  processingTime   Int      // Temps de traitement en ms
-  createdAt        DateTime @default(now())
-}
-
-model AppSetting {
-  key   String @id
-  value String
-  updatedAt DateTime @updatedAt
+enum Role {
+  admin
+  user
 }

@@ -29,13 +29,17 @@ export default function InterestChecksPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Redirection si non authentifié
+  // ✅ TOUS LES HOOKS DOIVENT ÊTRE APPELÉS AVANT LES CONDITIONS
+  useEffect(() => {
+    // Ne pas faire la requête si on n'est pas encore connecté
+    if (session) {
+      fetchInterestChecks()
+    }
+  }, [session])
+
+  // ✅ Maintenant les conditions peuvent être après tous les hooks
   if (status === 'loading') return <div>Chargement...</div>
   if (!session) redirect('/login')
-
-  useEffect(() => {
-    fetchInterestChecks()
-  }, [])
 
   const fetchInterestChecks = async () => {
     try {
