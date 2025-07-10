@@ -4,7 +4,8 @@ import { prisma } from '@/lib/prisma'
 const ALLOWED_KEYS = [
   'facebookBatchSize',
   'facebookPauseMs',
-  'facebookRelevanceScoreThreshold'
+  'facebookRelevanceScoreThreshold',
+  'scoreWeights' // Ajout pour la pondération du score
 ]
 
 export async function GET() {

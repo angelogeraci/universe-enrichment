@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getCachedSuggestions, cacheSuggestions } from '@/lib/facebook-cache'
 import { prisma } from '@/lib/prisma'
+import { calculateSimilarityScore, ScoreWeights } from '@/lib/similarityScore'
 
 // Types
 interface FacebookAudience {
@@ -25,6 +26,15 @@ interface SuggestionRequest {
   retryAttempt?: number
   maxRetries?: number
   relevanceScoreThreshold?: number
+}
+
+// Valeurs par défaut si pas de config
+const DEFAULT_WEIGHTS: ScoreWeights = {
+  textual: 0.4,
+  contextual: 0.25,
+  audience: 0.15,
+  brand: 0.15,
+  interestType: 0.05
 }
 
 // Fonction principale qui intègre le cache Facebook
@@ -174,23 +184,45 @@ export async function POST(request: NextRequest) {
     const suggestions = result.suggestions || []
     console.log(`✅ ${suggestions.length} suggestions trouvées (cache: ${result.fromCache ? 'HIT' : 'MISS'})`)
 
+    // Charger la config pondération
+    let scoreWeights = DEFAULT_WEIGHTS
+    try {
+      const setting = await prisma.appSetting.findUnique({ where: { key: 'scoreWeights' } })
+      if (setting && setting.value) {
+        scoreWeights = JSON.parse(setting.value)
+      }
+    } catch (e) {
+      // fallback sur défaut
+    }
+
     // Formatter les suggestions pour Interest Check (simple) ou Projet (avec sauvegarde DB)
-    const formattedSuggestions = suggestions.map((suggestion: FacebookAudience, index: number) => ({
-      label: suggestion.name,
-      facebookId: suggestion.id,
-      audience: Math.round((
-        (suggestion.audience_size_lower_bound || 0) + 
-        (suggestion.audience_size_upper_bound || 0)
-      ) / 2),
-      audienceRange: {
-        min: suggestion.audience_size_lower_bound || 0,
-        max: suggestion.audience_size_upper_bound || 0
-      },
-      similarityScore: Math.max(10, 95 - (index * 8)), // Score décroissant basé sur l'ordre
-      isBestMatch: index === 0 && suggestions.length > 0, // Premier = best match
-      isSelectedByUser: false, // Par défaut non sélectionné
-      path: suggestion.path || []
-    }))
+    const formattedSuggestions = suggestions.map((suggestion: FacebookAudience, index: number) => {
+      const score = calculateSimilarityScore({
+        input: searchTerm,
+        suggestion: {
+          label: suggestion.name,
+          audience: Math.round(((suggestion.audience_size_lower_bound || 0) + (suggestion.audience_size_upper_bound || 0)) / 2),
+          path: suggestion.path || [],
+          brand: undefined, // à adapter si info disponible
+          type: undefined // à adapter si info disponible
+        },
+        context: undefined, // à adapter si info disponible
+        weights: scoreWeights
+      })
+      return {
+        label: suggestion.name,
+        facebookId: suggestion.id,
+        audience: Math.round(((suggestion.audience_size_lower_bound || 0) + (suggestion.audience_size_upper_bound || 0)) / 2),
+        audienceRange: {
+          min: suggestion.audience_size_lower_bound || 0,
+          max: suggestion.audience_size_upper_bound || 0
+        },
+        similarityScore: score,
+        isBestMatch: index === 0 && suggestions.length > 0,
+        isSelectedByUser: false,
+        path: suggestion.path || []
+      }
+    })
 
     // Si c'est pour un projet (avec critereId), sauvegarder en DB
     if (critereId) {

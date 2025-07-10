@@ -220,6 +220,11 @@ const CriteriaRowSkeleton = () => (
   </tr>
 )
 
+// Fonction pour convertir le score de la DB (0-1) vers l'affichage (0-100%)
+function getDisplayScore(score: number): number {
+  return score <= 1 ? score * 100 : score;
+}
+
 export function ProjectResults ({
   isComplete = false,
   metrics = {
@@ -254,7 +259,7 @@ export function ProjectResults ({
   onDataChange?: () => void
   [key: string]: any
 }) {
-  const { success, error: showError } = useToast()
+  const { success, error, info } = useToast()
   
   // États pour la gestion du tableau
   const [search, setSearch] = useState('')
@@ -271,6 +276,7 @@ export function ProjectResults ({
   const [updateKey, setUpdateKey] = useState(0)
   const [loadingIndividualUpdate, setLoadingIndividualUpdate] = useState<Set<string>>(new Set())
   const [loadingCriteria, setLoadingCriteria] = useState<Set<string>>(new Set())
+  const [isRecalculating, setIsRecalculating] = useState(false)
   
   // États pour les filtres avancés
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
@@ -328,7 +334,7 @@ export function ProjectResults ({
       onDataChange()
     } catch (error: any) {
       console.error('❌ Erreur sélection suggestion:', error)
-      showError(error.message || 'Erreur lors de la sélection')
+      error(error.message || 'Erreur lors de la sélection')
     }
   }
 
@@ -369,7 +375,7 @@ export function ProjectResults ({
       
     } catch (error: any) {
       console.error('❌ Erreur suggestions Facebook:', error)
-      showError(error.message || 'Erreur lors de la récupération des suggestions Facebook', { duration: 5000 })
+      error(error.message || 'Erreur lors de la récupération des suggestions Facebook', { duration: 5000 })
     } finally {
       setLoadingFacebook(prev => ({ ...prev, [critere.id]: false }))
       setIsUpdating(false)
@@ -409,7 +415,7 @@ export function ProjectResults ({
       
     } catch (error: any) {
       console.error('❌ Erreur update individuel:', error)
-      showError(error.message || 'Erreur lors de la récupération des suggestions Facebook', { duration: 5000 })
+      error(error.message || 'Erreur lors de la récupération des suggestions Facebook', { duration: 5000 })
     } finally {
       // Retirer le critère des critères en loading
       setLoadingIndividualUpdate(prev => {
@@ -436,10 +442,10 @@ export function ProjectResults ({
         // Utiliser la callback pour mettre à jour les données parent au lieu de recharger la page
         onDataChange()
       } else {
-        showError('Erreur lors de la suppression du critère')
+        error('Erreur lors de la suppression du critère')
       }
     } catch (e) {
-      showError('Erreur lors de la suppression')
+      error('Erreur lors de la suppression')
     } finally {
       // Retirer le critère des critères en loading
       setLoadingCriteria(prev => {
@@ -458,14 +464,14 @@ export function ProjectResults ({
       const hasSuggestions = hasRealSuggestions(critere)
       const realSuggestions = getRealSuggestions(critere.suggestions || [])
       const mainSuggestion = hasSuggestions ? (realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]) : null
-      const isRelevant = mainSuggestion && mainSuggestion.similarityScore >= relevanceThreshold
+      const isRelevant = mainSuggestion && getDisplayScore(mainSuggestion.similarityScore) >= relevanceThreshold
       const showRelevant = relevanceFilter.some(opt => opt.value === 'relevant')
       const showNonRelevant = relevanceFilter.some(opt => opt.value === 'nonrelevant')
       const showNoSuggestion = relevanceFilter.some(opt => opt.value === 'nosuggestion')
       
       // Filtre par intervalle de score
       if (mainSuggestion) {
-        const score = mainSuggestion.similarityScore
+        const score = getDisplayScore(mainSuggestion.similarityScore)
         if (score < scoreRange.min || score > scoreRange.max) {
           return false
         }
@@ -501,8 +507,8 @@ export function ProjectResults ({
         const suggB = getRealSuggestions(b.suggestions || []).find(s => s.isSelectedByUser) || 
                      getRealSuggestions(b.suggestions || []).find(s => s.isBestMatch) || 
                      getRealSuggestions(b.suggestions || [])[0]
-        vA = suggA ? suggA.similarityScore : 0
-        vB = suggB ? suggB.similarityScore : 0
+        vA = suggA ? getDisplayScore(suggA.similarityScore) : 0
+        vB = suggB ? getDisplayScore(suggB.similarityScore) : 0
       } else {
         // Pour les autres colonnes (label, category, status)
         vA = a[sortBy as keyof Critere] || ''
@@ -614,12 +620,13 @@ export function ProjectResults ({
   // Calcul dynamique des métriques à partir de criteriaData
   const aiCriteriaCount = criteriaData.length
   const withFacebookCount = criteriaData.filter(c => hasRealSuggestions(c)).length
-  const validCriteriaCount = criteriaData.filter(critere => {
-    if (!hasRealSuggestions(critere)) return false
-    const realSuggestions = getRealSuggestions(critere.suggestions || [])
-    const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
-    return mainSuggestion && mainSuggestion.similarityScore >= relevanceThreshold
-  }).length
+  const validCriteriaCount = useMemo(() => {
+    return criteriaData.filter(critere => {
+      const realSuggestions = getRealSuggestions(critere.suggestions || [])
+      const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
+      return mainSuggestion && getDisplayScore(mainSuggestion.similarityScore) >= relevanceThreshold
+    }).length
+  }, [criteriaData, relevanceThreshold])
 
   // PRIORITÉ ABSOLUE : Affichage barre de progression update (avant toutes les autres conditions)
   if (isUpdating) {
@@ -649,11 +656,11 @@ export function ProjectResults ({
         // Remettre à zéro la sélection après suppression
         setSelected([])
       } else {
-        showError('Erreur lors de la suppression de certains critères')
+        error('Erreur lors de la suppression de certains critères')
       }
       onDataChange()
     } catch (e) {
-      showError('Erreur lors de la suppression')
+      error('Erreur lors de la suppression')
     }
   }
 
@@ -754,7 +761,7 @@ export function ProjectResults ({
       
     } catch (e) {
       console.error('❌ ERREUR GLOBALE:', e)
-      showError('Erreur lors de la mise à jour')
+      error('Erreur lors de la mise à jour')
     } finally {
       console.log('🏁 NETTOYAGE FINAL - Remise à zéro des états avec flushSync...')
       flushSync(() => {
@@ -762,6 +769,33 @@ export function ProjectResults ({
         setUpdateProgress({ current: 0, total: 0 })
         setCurrentlyProcessing('')
       })
+    }
+  }
+
+  // Fonction pour recalculer le score des critères sélectionnés
+  const recalculateSelectedScores = async () => {
+    setIsRecalculating(true)
+    try {
+      const res = await fetch('/api/facebook/suggestions/recalculate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ critereIds: selected })
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        success(`Score recalculé pour ${data.updatedCount} critère(s).`)
+        if (data.errors && data.errors.length > 0) {
+          info(data.errors.join('\n'))
+        }
+      } else {
+        error(data.error || 'Erreur lors du recalcul des scores.')
+      }
+      // Rafraîchir les données du tableau si besoin
+      onDataChange()
+    } catch (e) {
+      error('Une erreur est survenue lors du recalcul des scores.')
+    } finally {
+      setIsRecalculating(false)
     }
   }
 
@@ -861,7 +895,7 @@ export function ProjectResults ({
                   Exporter en XLSX
                 </Button>
                 {selected.length > 0 && (
-                  <>
+                  <div className="flex gap-2 items-center mb-2">
                     <BulkActionModal
                       action="update"
                       selectedCount={selected.length}
@@ -872,6 +906,13 @@ export function ProjectResults ({
                         <RefreshCw size={16} className="mr-2" /> Update ({selected.length})
                       </Button>
                     </BulkActionModal>
+                    <Button size="sm" variant="default" disabled={isRecalculating} onClick={recalculateSelectedScores}>
+                      {isRecalculating ? (
+                        <span className="flex items-center"><RefreshCw size={16} className="mr-2 animate-spin" />Recalcul en cours…</span>
+                      ) : (
+                        <span className="flex items-center"><RefreshCw size={16} className="mr-2" />Recalculer le score</span>
+                      )}
+                    </Button>
                     <BulkActionModal
                       action="delete"
                       selectedCount={selected.length}
@@ -881,7 +922,7 @@ export function ProjectResults ({
                         <Trash2 size={16} className="mr-2" /> Supprimer ({selected.length})
                       </Button>
                     </BulkActionModal>
-                  </>
+                  </div>
                 )}
               </div>
               <div className="text-sm text-muted-foreground">
@@ -1003,7 +1044,8 @@ export function ProjectResults ({
                                 const realSuggestions = getRealSuggestions(critere.suggestions || [])
                                 const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
                                 if (!mainSuggestion) return 'p-2 rounded border bg-gray-100 border-gray-300 text-gray-700 cursor-not-allowed'
-                                if (mainSuggestion.similarityScore < relevanceThreshold) {
+                                const displayScore = getDisplayScore(mainSuggestion.similarityScore)
+                                if (displayScore < relevanceThreshold) {
                                   return 'p-2 rounded border bg-red-50 border-red-300 text-red-600 cursor-pointer hover:bg-red-100 transition-colors'
                                 }
                                 // Score >= seuil : vert si Best, bleu si Selected, gris sinon
@@ -1033,7 +1075,7 @@ export function ProjectResults ({
                                   {(() => {
                                     const realSuggestions = getRealSuggestions(critere.suggestions || [])
                                     const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
-                                    if (mainSuggestion && mainSuggestion.similarityScore < relevanceThreshold) {
+                                    if (mainSuggestion && getDisplayScore(mainSuggestion.similarityScore) < relevanceThreshold) {
                                       return null
                                     }
                                     return null
@@ -1043,16 +1085,17 @@ export function ProjectResults ({
                                   {(() => {
                                     const realSuggestions = getRealSuggestions(critere.suggestions || [])
                                     const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
+                                    const displayScore = getDisplayScore(mainSuggestion?.similarityScore || 0)
                                     // Badge Selected si sélectionné et score >= seuil
-                                    if (mainSuggestion && mainSuggestion.isSelectedByUser && mainSuggestion.similarityScore >= relevanceThreshold) {
+                                    if (mainSuggestion && mainSuggestion.isSelectedByUser && displayScore >= relevanceThreshold) {
                                       return <Badge variant="outline" className="text-xs px-1 py-0">Selected</Badge>
                                     }
                                     // Badge Best si bestMatch et score >= seuil
-                                    if (mainSuggestion && mainSuggestion.isBestMatch && mainSuggestion.similarityScore >= relevanceThreshold) {
+                                    if (mainSuggestion && mainSuggestion.isBestMatch && displayScore >= relevanceThreshold) {
                                       return <Badge variant="default" className="text-xs px-1 py-0">Best</Badge>
                                     }
                                     // Point rouge si score < seuil - dans les badges on garde le comportement par défaut
-                                    if (mainSuggestion && mainSuggestion.similarityScore < relevanceThreshold) {
+                                    if (mainSuggestion && displayScore < relevanceThreshold) {
                                       return null // On n'affiche plus de badge, le point rouge suffit
                                     }
                                     return null
@@ -1084,17 +1127,17 @@ export function ProjectResults ({
                             {dropdownOpen === critere.id && (
                               <div className="absolute top-full left-0 right-0 z-[9999] mt-1 bg-white border rounded-lg shadow-xl max-h-64 overflow-y-auto">
                                 {getRealSuggestions(critere.suggestions || []).map((suggestion, index) => {
-                                  const isVeryHighQuality = suggestion.similarityScore >= 80
-                                  const isHighQuality = suggestion.similarityScore >= relevanceThreshold && suggestion.similarityScore < 80
-                                  const isMediumQuality = suggestion.similarityScore >= 30 && suggestion.similarityScore < relevanceThreshold
-                                  const isLowQuality = suggestion.similarityScore < 30
+                                  const isVeryHighQuality = getDisplayScore(suggestion.similarityScore) >= 80
+                                  const isHighQuality = getDisplayScore(suggestion.similarityScore) >= relevanceThreshold && getDisplayScore(suggestion.similarityScore) < 80
+                                  const isMediumQuality = getDisplayScore(suggestion.similarityScore) >= 30 && getDisplayScore(suggestion.similarityScore) < relevanceThreshold
+                                  const isLowQuality = getDisplayScore(suggestion.similarityScore) < 30
                                   return (
                                     <div
                                       key={suggestion.id}
                                       className={`p-3 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer transition-colors ${
                                         suggestion.isSelectedByUser ? 'bg-blue-50' :
-                                        suggestion.isBestMatch && suggestion.similarityScore >= relevanceThreshold ? 'bg-green-50' :
-                                        suggestion.similarityScore < relevanceThreshold ? 'bg-red-50' : ''
+                                        suggestion.isBestMatch && getDisplayScore(suggestion.similarityScore) >= relevanceThreshold ? 'bg-green-50' :
+                                        getDisplayScore(suggestion.similarityScore) < relevanceThreshold ? 'bg-red-50' : ''
                                       }`}
                                       onClick={() => {
                                         handleSelectSuggestion(critere.id, suggestion.id)
@@ -1112,7 +1155,7 @@ export function ProjectResults ({
 
                                           </div>
                                           <div className="text-xs text-muted-foreground mt-1">
-                                            Score: {suggestion.similarityScore}% • 
+                                            Score: {Math.round(getDisplayScore(suggestion.similarityScore))}% • 
                                             Audience: {formatAudience(suggestion.audience)} • 
                                             Type: interest
                                             {isLowQuality && <span className="text-red-600 font-medium"> • NON PERTINENTE</span>}
@@ -1120,7 +1163,7 @@ export function ProjectResults ({
                                         </div>
                                         <div className="flex items-center gap-1 ml-2">
                                           {suggestion.isSelectedByUser && <Badge variant="outline" className="text-xs px-1 py-0">Selected</Badge>}
-                                          {suggestion.isBestMatch && suggestion.similarityScore >= relevanceThreshold && <Badge variant="default" className="text-xs px-1 py-0">Best</Badge>}
+                                          {suggestion.isBestMatch && getDisplayScore(suggestion.similarityScore) >= relevanceThreshold && <Badge variant="default" className="text-xs px-1 py-0">Best</Badge>}
                                         </div>
                                       </div>
                                     </div>
@@ -1141,20 +1184,22 @@ export function ProjectResults ({
                             <div className={`font-mono text-sm ${(() => {
                               const realSuggestions = getRealSuggestions(critere.suggestions || [])
                               const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
-                              return mainSuggestion && mainSuggestion.similarityScore < relevanceThreshold ? 'text-red-600 font-bold' : ''
+                              const displayScore = mainSuggestion ? getDisplayScore(mainSuggestion.similarityScore) : 0
+                              return mainSuggestion && displayScore < relevanceThreshold ? 'text-red-600 font-bold' : ''
                             })()}`}>
                               {(() => {
                                 const realSuggestions = getRealSuggestions(critere.suggestions || [])
                                 const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
-                                return mainSuggestion?.similarityScore
+                                const displayScore = mainSuggestion ? getDisplayScore(mainSuggestion.similarityScore) : 0
+                                return Math.round(displayScore)
                               })()}%
                             </div>
                             {(() => {
                               const realSuggestions = getRealSuggestions(critere.suggestions || [])
                               const currentSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
                               if (!currentSuggestion) return null
-                              const score = currentSuggestion.similarityScore
-                              return <div className={`w-2 h-2 rounded-full ${score >= relevanceThreshold ? 'bg-green-500' : 'bg-red-500'}`} title={score >= relevanceThreshold ? 'Pertinent' : 'Non pertinent'}></div>
+                              const displayScore = getDisplayScore(currentSuggestion.similarityScore)
+                              return <div className={`w-2 h-2 rounded-full ${displayScore >= relevanceThreshold ? 'bg-green-500' : 'bg-red-500'}`} title={displayScore >= relevanceThreshold ? 'Pertinent' : 'Non pertinent'}></div>
                             })()}
                           </div>
                         ) : (
@@ -1325,7 +1370,7 @@ export function ProjectResults ({
                 Exporter en XLSX
               </Button>
               {selected.length > 0 && (
-                <>
+                <div className="flex gap-2 items-center mb-2">
                   <BulkActionModal
                     action="update"
                     selectedCount={selected.length}
@@ -1336,6 +1381,13 @@ export function ProjectResults ({
                       <RefreshCw size={16} className="mr-2" /> Update ({selected.length})
                     </Button>
                   </BulkActionModal>
+                  <Button size="sm" variant="default" disabled={isRecalculating} onClick={recalculateSelectedScores}>
+                    {isRecalculating ? (
+                      <span className="flex items-center"><RefreshCw size={16} className="mr-2 animate-spin" />Recalcul en cours…</span>
+                    ) : (
+                      <span className="flex items-center"><RefreshCw size={16} className="mr-2" />Recalculer le score</span>
+                    )}
+                  </Button>
                   <BulkActionModal
                     action="delete"
                     selectedCount={selected.length}
@@ -1345,7 +1397,7 @@ export function ProjectResults ({
                       <Trash2 size={16} className="mr-2" /> Supprimer ({selected.length})
                     </Button>
                   </BulkActionModal>
-                </>
+                </div>
               )}
             </div>
             <div className="text-sm text-muted-foreground">
@@ -1402,7 +1454,8 @@ export function ProjectResults ({
                               const realSuggestions = getRealSuggestions(critere.suggestions || [])
                               const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
                               if (!mainSuggestion) return 'p-2 rounded border bg-gray-100 border-gray-300 text-gray-700 cursor-not-allowed'
-                              if (mainSuggestion.similarityScore < relevanceThreshold) {
+                              const displayScore = getDisplayScore(mainSuggestion.similarityScore)
+                              if (displayScore < relevanceThreshold) {
                                 return 'p-2 rounded border bg-red-50 border-red-300 text-red-600 cursor-pointer hover:bg-red-100 transition-colors'
                               }
                               // Score >= seuil : vert si Best, bleu si Selected, gris sinon
@@ -1432,7 +1485,7 @@ export function ProjectResults ({
                                 {(() => {
                                   const realSuggestions = getRealSuggestions(critere.suggestions || [])
                                   const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
-                                  if (mainSuggestion && mainSuggestion.similarityScore < relevanceThreshold) {
+                                  if (mainSuggestion && getDisplayScore(mainSuggestion.similarityScore) < relevanceThreshold) {
                                     return null
                                   }
                                   return null
@@ -1442,16 +1495,17 @@ export function ProjectResults ({
                                 {(() => {
                                   const realSuggestions = getRealSuggestions(critere.suggestions || [])
                                   const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
+                                  const displayScore = getDisplayScore(mainSuggestion?.similarityScore || 0)
                                   // Badge Selected si sélectionné et score >= seuil
-                                  if (mainSuggestion && mainSuggestion.isSelectedByUser && mainSuggestion.similarityScore >= relevanceThreshold) {
+                                  if (mainSuggestion && mainSuggestion.isSelectedByUser && displayScore >= relevanceThreshold) {
                                     return <Badge variant="outline" className="text-xs px-1 py-0">Selected</Badge>
                                   }
                                   // Badge Best si bestMatch et score >= seuil
-                                  if (mainSuggestion && mainSuggestion.isBestMatch && mainSuggestion.similarityScore >= relevanceThreshold) {
+                                  if (mainSuggestion && mainSuggestion.isBestMatch && displayScore >= relevanceThreshold) {
                                     return <Badge variant="default" className="text-xs px-1 py-0">Best</Badge>
                                   }
                                   // Point rouge si score < seuil - dans les badges on garde le comportement par défaut
-                                  if (mainSuggestion && mainSuggestion.similarityScore < relevanceThreshold) {
+                                  if (mainSuggestion && displayScore < relevanceThreshold) {
                                     return null // On n'affiche plus de badge, le point rouge suffit
                                   }
                                   return null
@@ -1483,17 +1537,17 @@ export function ProjectResults ({
                           {dropdownOpen === critere.id && (
                             <div className="absolute top-full left-0 right-0 z-[9999] mt-1 bg-white border rounded-lg shadow-xl max-h-64 overflow-y-auto">
                               {getRealSuggestions(critere.suggestions || []).map((suggestion, index) => {
-                                const isVeryHighQuality = suggestion.similarityScore >= 80
-                                const isHighQuality = suggestion.similarityScore >= relevanceThreshold && suggestion.similarityScore < 80
-                                const isMediumQuality = suggestion.similarityScore >= 30 && suggestion.similarityScore < relevanceThreshold
-                                const isLowQuality = suggestion.similarityScore < 30
+                                const isVeryHighQuality = getDisplayScore(suggestion.similarityScore) >= 80
+                                const isHighQuality = getDisplayScore(suggestion.similarityScore) >= relevanceThreshold && getDisplayScore(suggestion.similarityScore) < 80
+                                const isMediumQuality = getDisplayScore(suggestion.similarityScore) >= 30 && getDisplayScore(suggestion.similarityScore) < relevanceThreshold
+                                const isLowQuality = getDisplayScore(suggestion.similarityScore) < 30
                                 return (
                                   <div
                                     key={suggestion.id}
                                     className={`p-3 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer transition-colors ${
                                       suggestion.isSelectedByUser ? 'bg-blue-50' :
-                                      suggestion.isBestMatch && suggestion.similarityScore >= relevanceThreshold ? 'bg-green-50' :
-                                      suggestion.similarityScore < relevanceThreshold ? 'bg-red-50' : ''
+                                      suggestion.isBestMatch && getDisplayScore(suggestion.similarityScore) >= relevanceThreshold ? 'bg-green-50' :
+                                      getDisplayScore(suggestion.similarityScore) < relevanceThreshold ? 'bg-red-50' : ''
                                     }`}
                                     onClick={() => {
                                       handleSelectSuggestion(critere.id, suggestion.id)
@@ -1511,7 +1565,7 @@ export function ProjectResults ({
 
                                         </div>
                                         <div className="text-xs text-muted-foreground mt-1">
-                                          Score: {suggestion.similarityScore}% • 
+                                          Score: {Math.round(getDisplayScore(suggestion.similarityScore))}% • 
                                           Audience: {formatAudience(suggestion.audience)} • 
                                           Type: interest
                                           {isLowQuality && <span className="text-red-600 font-medium"> • NON PERTINENTE</span>}
@@ -1519,7 +1573,7 @@ export function ProjectResults ({
                                       </div>
                                       <div className="flex items-center gap-1 ml-2">
                                         {suggestion.isSelectedByUser && <Badge variant="outline" className="text-xs px-1 py-0">Selected</Badge>}
-                                        {suggestion.isBestMatch && suggestion.similarityScore >= relevanceThreshold && <Badge variant="default" className="text-xs px-1 py-0">Best</Badge>}
+                                        {suggestion.isBestMatch && getDisplayScore(suggestion.similarityScore) >= relevanceThreshold && <Badge variant="default" className="text-xs px-1 py-0">Best</Badge>}
                                       </div>
                                     </div>
                                   </div>
@@ -1540,20 +1594,22 @@ export function ProjectResults ({
                           <div className={`font-mono text-sm ${(() => {
                             const realSuggestions = getRealSuggestions(critere.suggestions || [])
                             const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
-                            return mainSuggestion && mainSuggestion.similarityScore < relevanceThreshold ? 'text-red-600 font-bold' : ''
+                            const displayScore = mainSuggestion ? getDisplayScore(mainSuggestion.similarityScore) : 0
+                            return mainSuggestion && displayScore < relevanceThreshold ? 'text-red-600 font-bold' : ''
                           })()}`}>
                             {(() => {
                               const realSuggestions = getRealSuggestions(critere.suggestions || [])
                               const mainSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
-                              return mainSuggestion?.similarityScore
+                              const displayScore = mainSuggestion ? getDisplayScore(mainSuggestion.similarityScore) : 0
+                              return Math.round(displayScore)
                             })()}%
                           </div>
                           {(() => {
                             const realSuggestions = getRealSuggestions(critere.suggestions || [])
                             const currentSuggestion = realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]
                             if (!currentSuggestion) return null
-                            const score = currentSuggestion.similarityScore
-                            return <div className={`w-2 h-2 rounded-full ${score >= relevanceThreshold ? 'bg-green-500' : 'bg-red-500'}`} title={score >= relevanceThreshold ? 'Pertinent' : 'Non pertinent'}></div>
+                            const displayScore = getDisplayScore(currentSuggestion.similarityScore)
+                            return <div className={`w-2 h-2 rounded-full ${displayScore >= relevanceThreshold ? 'bg-green-500' : 'bg-red-500'}`} title={displayScore >= relevanceThreshold ? 'Pertinent' : 'Non pertinent'}></div>
                           })()}
                         </div>
                       ) : (

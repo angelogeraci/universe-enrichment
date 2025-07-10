@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import useSWR, { mutate as globalMutate } from 'swr'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
@@ -44,6 +44,11 @@ import Select from 'react-select'
 import type { Row } from '@tanstack/react-table'
 import { Checkbox } from './ui/checkbox'
 import { useToast } from '@/hooks/useToast'
+
+// Helper function to convert 0-1 scores back to 0-100% for display
+function getDisplayScore(score: number): number {
+  return score <= 1 ? score * 100 : score
+}
 
 type EnrichmentStatus = 'pending' | 'in_progress' | 'paused' | 'cancelled' | 'done' | 'failed'
 
@@ -337,13 +342,13 @@ export function InterestCheckResultsClient({
     const realSuggestions = getRealSuggestions(interest.suggestions || [])
     const hasSuggestions = realSuggestions.length > 0
     const mainSuggestion = hasSuggestions ? (realSuggestions.find(s => s.isSelectedByUser) || realSuggestions.find(s => s.isBestMatch) || realSuggestions[0]) : null
-    const isRelevant = mainSuggestion && mainSuggestion.similarityScore >= relevanceThreshold
+    const isRelevant = mainSuggestion && getDisplayScore(mainSuggestion.similarityScore) >= relevanceThreshold
     const showRelevant = relevanceFilter.some(opt => opt.value === 'relevant')
     const showNonRelevant = relevanceFilter.some(opt => opt.value === 'nonrelevant')
     const showNoSuggestion = relevanceFilter.some(opt => opt.value === 'nosuggestion')
     // Score min/max
     if (mainSuggestion) {
-      const score = mainSuggestion.similarityScore
+      const score = getDisplayScore(mainSuggestion.similarityScore)
       if (score < scoreRange.min || score > scoreRange.max) return false
     }
     // Audience min
@@ -429,8 +434,8 @@ export function InterestCheckResultsClient({
         selected ? selected.label : '',
         selected ? selected.facebookId || '' : '', // ID Facebook de la suggestion sélectionnée
         selected ? selected.audience : '',
-        selected ? selected.similarityScore : '',
-        interest.suggestions.map(s => `${s.label} (ID: ${s.facebookId || 'N/A'}, ${s.audience}, ${s.similarityScore}%)${s.isBestMatch ? ' [Best]' : ''}${s.isSelectedByUser ? ' [Selected]' : ''}`).join('; ')
+        selected ? getDisplayScore(selected.similarityScore) : '',
+        interest.suggestions.map(s => `${s.label} (ID: ${s.facebookId || 'N/A'}, ${s.audience}, ${Math.round(getDisplayScore(s.similarityScore))}%)${s.isBestMatch ? ' [Best]' : ''}${s.isSelectedByUser ? ' [Selected]' : ''}`).join('; ')
       ]
     })
     const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
@@ -454,7 +459,7 @@ export function InterestCheckResultsClient({
           )}
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span>Score : <span className="font-semibold">{suggestion.similarityScore?.toFixed(1) ?? '-'}</span></span>
+          <span>Score : <span className="font-semibold">{Math.round(getDisplayScore(suggestion.similarityScore))}</span></span>
           <span>Audience : <span className="font-semibold">{suggestion.audience?.toLocaleString() ?? '-'}</span></span>
         </div>
       </div>
@@ -465,6 +470,34 @@ export function InterestCheckResultsClient({
   const pageSelected = paginatedInterests.length > 0 && paginatedInterests.every(i => selectedIds.includes(i.id))
   const pageSome = paginatedInterests.some(i => selectedIds.includes(i.id))
   const isIndeterminate = pageSome && !pageSelected
+
+  const [isRecalculating, setIsRecalculating] = useState(false)
+
+  const recalculateSelectedScores = async () => {
+    if (selectedIds.length === 0) return
+    setIsRecalculating(true)
+    try {
+      const res = await fetch(`/api/interests-check/${slug}/recalculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interestIds: selectedIds })
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        toast(`Score recalculé pour ${data.updatedCount} intérêt(s).`, 'success')
+        if (data.errors && data.errors.length > 0) {
+          toast(data.errors.join('\n'), 'info')
+        }
+        mutateInterests()
+      } else {
+        toast(data.error || 'Erreur lors du recalcul des scores.', 'error')
+      }
+    } catch (e) {
+      toast('Une erreur est survenue lors du recalcul des scores.', 'error')
+    } finally {
+      setIsRecalculating(false)
+    }
+  }
 
   // Show skeleton during loading
   if (isLoading && currentStatus === 'done') {
@@ -659,6 +692,9 @@ export function InterestCheckResultsClient({
             {selectedIds.length > 0 && (
               <div className="sticky top-0 z-10 bg-white border-b flex items-center gap-4 px-4 py-2 shadow-sm">
                 <span>{selectedIds.length} sélectionné{selectedIds.length > 1 ? 's' : ''}</span>
+                <Button variant="default" size="sm" onClick={recalculateSelectedScores} disabled={selectedIds.length === 0 || isRecalculating}>
+                  {isRecalculating ? <RotateCcw className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />} Recalculer le score
+                </Button>
                 <Button variant="destructive" size="sm" onClick={deleteSelected} disabled={selectedIds.length === 0}>
                   <Trash2 className="h-4 w-4 mr-2" /> Supprimer la sélection
                 </Button>
@@ -722,7 +758,7 @@ export function InterestCheckResultsClient({
                                   <div className="flex items-center gap-1 ml-2">
                                     <Users className="h-3 w-3" />
                                     <span>{suggestion.audience.toLocaleString()}</span>
-                                    <span className="ml-1 text-xs">({suggestion.similarityScore}%)</span>
+                                    <span className="ml-1 text-xs">({Math.round(getDisplayScore(suggestion.similarityScore))}%)</span>
                                   </div>
                                 </div>
                               </div>
