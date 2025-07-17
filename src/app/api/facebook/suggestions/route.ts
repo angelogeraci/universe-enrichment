@@ -218,11 +218,17 @@ export async function POST(request: NextRequest) {
           max: suggestion.audience_size_upper_bound || 0
         },
         similarityScore: score,
-        isBestMatch: index === 0 && suggestions.length > 0,
+        isBestMatch: false, // Will be set after sorting
         isSelectedByUser: false,
         path: suggestion.path || []
       }
     })
+
+    // Trier par score décroissant et marquer le meilleur
+    formattedSuggestions.sort((a, b) => b.similarityScore - a.similarityScore)
+    if (formattedSuggestions.length > 0) {
+      formattedSuggestions[0].isBestMatch = true
+    }
 
     // Si c'est pour un projet (avec critereId), sauvegarder en DB
     if (critereId) {

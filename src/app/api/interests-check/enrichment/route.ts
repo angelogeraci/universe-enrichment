@@ -187,9 +187,15 @@ async function enrichInterests(interestCheckId: string, slug: string, country: s
               facebookId: suggestion.facebookId, // ✅ AJOUT DE L'ID FACEBOOK
               audience: suggestion.audience,
               similarityScore: suggestion.similarityScore || 0,
-              isBestMatch: suggestion.isBestMatch || false,
+              isBestMatch: false, // Will be set after sorting
               isSelectedByUser: false
             }))
+
+            // Trier par score décroissant et marquer le meilleur
+            suggestions.sort((a: any, b: any) => b.similarityScore - a.similarityScore)
+            if (suggestions.length > 0) {
+              suggestions[0].isBestMatch = true
+            }
 
             await prisma.interestSuggestion.createMany({
               data: suggestions

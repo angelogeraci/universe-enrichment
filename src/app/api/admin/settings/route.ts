@@ -5,6 +5,7 @@ const ALLOWED_KEYS = [
   'facebookBatchSize',
   'facebookPauseMs',
   'facebookRelevanceScoreThreshold',
+  'minRelevanceScorePercent',
   'scoreWeights' // Ajout pour la pondération du score
 ]
 

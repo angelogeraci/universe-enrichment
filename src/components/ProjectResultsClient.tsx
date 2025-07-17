@@ -116,8 +116,12 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
     fetch('/api/admin/settings')
       .then(res => res.json())
       .then(data => {
-        if (data.facebookRelevanceScoreThreshold) {
-          // Convertir le format décimal (0.7) en format pourcentage (70)
+        // Priorité au score minimal de pertinence configuré
+        if (data.minRelevanceScorePercent) {
+          const minScore = Number(data.minRelevanceScorePercent)
+          setRelevanceThreshold(minScore)
+        } else if (data.facebookRelevanceScoreThreshold) {
+          // Fallback sur l'ancien setting si le nouveau n'existe pas
           const threshold = Number(data.facebookRelevanceScoreThreshold)
           setRelevanceThreshold(threshold <= 1 ? threshold * 100 : threshold)
         }
@@ -222,6 +226,10 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
         progress={progressData?.progress || { current: 0, total: 0, step: 'Starting...', errors: 0, eta: '-' }}
         criteriaData={data?.criteres || []}
         categoriesData={categoriesData}
+        relevanceThreshold={relevanceThreshold}
+        projectSlug={slug}
+        enrichmentStatus={currentStatus}
+        onControlProject={controlProject}
         onDataChange={async () => {
           await mutateCriteres()
         }}
@@ -240,6 +248,9 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
         criteriaData={data?.criteres || []}
         categoriesData={categoriesData}
         relevanceThreshold={relevanceThreshold}
+        projectSlug={slug}
+        enrichmentStatus={currentStatus}
+        onControlProject={controlProject}
         onDataChange={async () => {
           await mutateCriteres()
         }}
@@ -254,6 +265,10 @@ export function ProjectResultsClient({ slug, enrichmentStatus: initialStatus, to
       progress={progressData?.progress || { current: 0, total: 0, step: 'Starting...', errors: 0, eta: '-' }}
       criteriaData={data?.criteres || []}
       categoriesData={categoriesData}
+      relevanceThreshold={relevanceThreshold}
+      projectSlug={slug}
+      enrichmentStatus={currentStatus}
+      onControlProject={controlProject}
       onDataChange={async () => {
         await mutateCriteres()
       }}

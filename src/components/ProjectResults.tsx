@@ -1,21 +1,23 @@
 'use client'
 
-import React, { useMemo, useState, useRef, useEffect } from 'react'
+import React, { useMemo, useState, useEffect, useRef } from 'react'
 import { flushSync } from 'react-dom'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Progress } from './ui/progress'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
+import { Progress } from './ui/progress'
+import { Pagination } from './ui/pagination'
+import { Separator } from './ui/separator'
+import { Skeleton } from './ui/skeleton'
 import { Checkbox } from './ui/checkbox'
-import { Badge } from './ui/badge'
+import { Switch } from './ui/switch'
+import { Trash2, Edit, RefreshCw, Filter, X, Search, ChevronDown, ChevronUp, Download, Play, Pause, XCircle, EyeOff, Eye } from 'lucide-react'
+import Select from 'react-select'
 import { useToast } from '@/hooks/useToast'
-import * as XLSX from 'xlsx'
-import { RefreshCw, Edit, Trash2, ChevronLeft, ChevronRight, Filter, X } from 'lucide-react'
 import BulkActionModal from './BulkActionModal'
 import EditCriteriaModal from './EditCriteriaModal'
-import Select from 'react-select'
-import { Skeleton } from './ui/skeleton'
-import { Pagination } from './ui/pagination'
+import * as XLSX from 'xlsx'
 
 export type Critere = {
   id: string
@@ -25,6 +27,7 @@ export type Critere = {
   country: string
   status: string
   note?: string
+  isHidden?: boolean
   suggestions: Array<{
     id: string
     label: string
@@ -80,12 +83,20 @@ function UpdateProgressBar({
   updateProgress, 
   currentlyProcessing, 
   selected, 
-  criteriaData 
+  criteriaData,
+  isPaused,
+  onPause,
+  onResume,
+  onCancel
 }: {
   updateProgress: { current: number, total: number }
   currentlyProcessing: string
   selected: string[]
   criteriaData: Critere[]
+  isPaused?: boolean
+  onPause?: () => void
+  onResume?: () => void
+  onCancel?: () => void
 }) {
   const percentage = updateProgress.total > 0 ? Math.round((updateProgress.current / updateProgress.total) * 100) : 0
   return (
@@ -94,8 +105,41 @@ function UpdateProgressBar({
       <div className="w-full flex flex-col gap-4 p-6 bg-white border border-gray-200 rounded-xl shadow-md">
         <div className="text-center">
           <h2 className="text-xl font-bold text-primary mb-2">Mise à jour des suggestions Facebook</h2>
-          <p className="text-muted-foreground">Traitement en cours, veuillez patienter...</p>
+          <p className="text-muted-foreground">
+            {isPaused ? 'Mise à jour en pause - Cliquez sur Reprendre pour continuer' : 'Traitement en cours, veuillez patienter...'}
+          </p>
         </div>
+        
+        {/* Boutons de contrôle */}
+        {(onPause || onResume || onCancel) && (
+          <div className="flex items-center justify-center gap-4 mb-4">
+            {isPaused ? (
+              onResume && (
+                <Button onClick={onResume} className="bg-green-600 hover:bg-green-700" size="sm">
+                  <Play className="h-4 w-4 mr-2" />
+                  Reprendre
+                </Button>
+              )
+            ) : (
+              onPause && (
+                <Button onClick={onPause} variant="outline" size="sm">
+                  <Pause className="h-4 w-4 mr-2" />
+                  Pause
+                </Button>
+              )
+            )}
+            {onCancel && (
+              <Button onClick={onCancel} variant="destructive" size="sm">
+                <XCircle className="h-4 w-4 mr-2" />
+                Annuler
+              </Button>
+            )}
+            <div className="px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">
+              {isPaused ? 'En pause' : 'En cours'}
+            </div>
+          </div>
+        )}
+        
         <div className="w-full flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-primary">Progression</span>
@@ -104,7 +148,9 @@ function UpdateProgressBar({
           {/* Barre de progression custom avec animation */}
           <div className="relative h-4 w-full rounded-full bg-gray-200 overflow-hidden border border-gray-300">
             <div 
-              className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-500 ease-out"
+              className={`absolute left-0 top-0 h-full transition-all duration-500 ease-out ${
+                isPaused ? 'bg-gradient-to-r from-orange-500 to-orange-600' : 'bg-gradient-to-r from-blue-500 to-blue-600'
+              }`}
               style={{ width: `${percentage}%` }}
             />
             <div className="absolute inset-0 flex items-center justify-center">
@@ -116,9 +162,14 @@ function UpdateProgressBar({
           {/* Critère en cours de traitement */}
           {currentlyProcessing && (
             <div className="flex items-center justify-center gap-2 mt-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+              {isPaused ? (
+                <div className="w-4 h-4 bg-orange-500 rounded-full"></div>
+              ) : (
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+              )}
               <span className="text-sm text-primary">
-                En cours : <span className="font-medium">{currentlyProcessing}</span>
+                {isPaused ? 'En pause : ' : 'En cours : '}
+                <span className="font-medium">{currentlyProcessing}</span>
               </span>
             </div>
           )}
@@ -154,7 +205,7 @@ function UpdateProgressBar({
                   return (
                     <tr key={critere.id} className={`border-b last:border-b-0 ${
                       isCompleted ? 'bg-green-50' : 
-                      isProcessing ? 'bg-blue-50' : 
+                      isProcessing ? (isPaused ? 'bg-orange-50' : 'bg-blue-50') : 
                       'bg-gray-50'
                     }`}>
                       <td className="px-4 py-3 font-medium">{critere.label}</td>
@@ -166,9 +217,15 @@ function UpdateProgressBar({
                             Traité
                           </span>
                         ) : isProcessing ? (
-                          <span className="inline-flex items-center gap-2 text-blue-700 font-medium">
-                            <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-600 border-t-transparent"></div>
-                            En cours...
+                          <span className={`inline-flex items-center gap-2 font-medium ${
+                            isPaused ? 'text-orange-700' : 'text-blue-700'
+                          }`}>
+                            {isPaused ? (
+                              <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+                            ) : (
+                              <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-600 border-t-transparent"></div>
+                            )}
+                            {isPaused ? 'En pause...' : 'En cours...'}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-muted-foreground">
@@ -244,8 +301,11 @@ export function ProjectResults ({
   onlyProgress = false,
   criteriaData = [],
   categoriesData = [],
-  relevanceThreshold = 60,
+  relevanceThreshold = 65,
   onDataChange = () => {},
+  projectSlug,
+  enrichmentStatus,
+  onControlProject,
   ...props
 }: {
   isComplete?: boolean
@@ -257,9 +317,12 @@ export function ProjectResults ({
   categoriesData?: Array<{ name: string, path: string[], andCriteria?: string[] }>
   relevanceThreshold?: number
   onDataChange?: () => void
+  projectSlug?: string
+  enrichmentStatus?: string
+  onControlProject?: (action: 'pause' | 'resume' | 'cancel') => void
   [key: string]: any
 }) {
-  const { success, error, info } = useToast()
+  const { success, error, info, warning } = useToast()
   
   // États pour la gestion du tableau
   const [search, setSearch] = useState('')
@@ -286,6 +349,86 @@ export function ProjectResults ({
     { value: 'nonrelevant', label: 'Non pertinents' },
     { value: 'nosuggestion', label: 'Sans suggestion' },
   ])
+  
+  // États pour le contrôle des mises à jour batch
+  const [batchUpdatePaused, setBatchUpdatePaused] = useState(false)
+  const [batchUpdateCancelled, setBatchUpdateCancelled] = useState(false)
+  const [batchUpdateController, setBatchUpdateController] = useState<{ cancel: () => void } | null>(null)
+
+  // État pour le filtre des critères masqués
+  const [showHidden, setShowHidden] = useState(true)
+
+  // Fonction pour masquer/afficher un critère individuellement
+  const handleToggleCritereVisibility = async (critereId: string, isHidden: boolean) => {
+    try {
+      const res = await fetch(`/api/criteres/${critereId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isHidden })
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        success(data.message)
+        onDataChange()
+      } else {
+        error(data.error || 'Erreur lors de la mise à jour.')
+      }
+    } catch (e) {
+      error('Une erreur est survenue.')
+    }
+  }
+
+  // Fonction pour masquer les critères sélectionnés
+  const handleHideSelected = async () => {
+    if (selected.length === 0) {
+      warning('Aucun critère sélectionné.')
+      return
+    }
+    
+    try {
+      const res = await fetch('/api/criteres/batch', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ critereIds: selected, action: 'hide' })
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        success(data.message)
+        setSelected([])
+        onDataChange()
+      } else {
+        error(data.error || 'Erreur lors du masquage.')
+      }
+    } catch (e) {
+      error('Une erreur est survenue lors du masquage.')
+    }
+  }
+
+  // Fonction pour afficher les critères sélectionnés
+  const handleShowSelected = async () => {
+    if (selected.length === 0) {
+      warning('Aucun critère sélectionné.')
+      return
+    }
+    
+    try {
+      const res = await fetch('/api/criteres/batch', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ critereIds: selected, action: 'show' })
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        success(data.message)
+        setSelected([])
+        onDataChange()
+      } else {
+        error(data.error || 'Erreur lors de l\'affichage.')
+      }
+    } catch (e) {
+      error('Une erreur est survenue lors de l\'affichage.')
+    }
+  }
 
   // Debug: Log des changements d'état
   useEffect(() => {
@@ -313,6 +456,25 @@ export function ProjectResults ({
 
   // Ajout de l'option 1000 résultats par page
   const resultsPerPageOptions = [25, 50, 100, 200, 500, 1000]
+
+  // Fonctions de contrôle des mises à jour batch (déclarées tôt pour éviter les erreurs de hoisting)
+  const handlePauseBatchUpdate = () => {
+    setBatchUpdatePaused(true)
+    console.log('⏸️ MISE À JOUR EN PAUSE')
+  }
+
+  const handleResumeBatchUpdate = () => {
+    setBatchUpdatePaused(false)
+    console.log('▶️ REPRISE DE LA MISE À JOUR')
+  }
+
+  const handleCancelBatchUpdate = () => {
+    setBatchUpdateCancelled(true)
+    if (batchUpdateController) {
+      batchUpdateController.cancel()
+    }
+    console.log('❌ ANNULATION DE LA MISE À JOUR')
+  }
 
   // Fonction pour sélectionner une suggestion spécifique
   const handleSelectSuggestion = async (critereId: string, suggestionId: string) => {
@@ -459,6 +621,12 @@ export function ProjectResults ({
   // Filtrage et tri
   const filtered = useMemo(() => {
     let data = criteriaData
+    
+    // Filtrage par visibilité (critères masqués)
+    if (!showHidden) {
+      data = data.filter(critere => !critere.isHidden)
+    }
+    
     // Filtrage par pertinence multi-select + sans suggestion
     data = data.filter(critere => {
       const hasSuggestions = hasRealSuggestions(critere)
@@ -526,7 +694,7 @@ export function ProjectResults ({
       }
     })
     return data
-  }, [criteriaData, search, sortBy, sortDir, relevanceFilter, scoreRange])
+  }, [criteriaData, search, sortBy, sortDir, relevanceFilter, scoreRange, showHidden])
 
   const toggleSelect = (id: string) => {
     setSelected(sel => sel.includes(id) ? sel.filter(s => s !== id) : [...sel, id])
@@ -582,7 +750,11 @@ export function ProjectResults ({
       'Level 1',
       'Level 2',
     ]
-    const rows = filtered.flatMap(critere => {
+    
+    // Filtrer les critères pour exclure les masqués
+    const criteresToExport = criteriaData.filter(critere => !critere.isHidden)
+    
+    const rows = criteresToExport.flatMap(critere => {
       if (!critere.suggestions || critere.suggestions.length === 0) return []
       // Prendre la suggestion sélectionnée, sinon best match, sinon la première
       const selected = critere.suggestions.find(s => s.isSelectedByUser) || critere.suggestions.find(s => s.isBestMatch) || critere.suggestions[0]
@@ -610,7 +782,7 @@ export function ProjectResults ({
         level2
       ]]
     })
-    console.log('Export XLSX - lignes exportées:', rows.length)
+    console.log('Export XLSX - critères non masqués:', criteresToExport.length, '- lignes exportées:', rows.length)
     const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Export')
@@ -639,6 +811,10 @@ export function ProjectResults ({
         currentlyProcessing={currentlyProcessing}
         selected={selected}
         criteriaData={criteriaData}
+        isPaused={batchUpdatePaused}
+        onPause={handlePauseBatchUpdate}
+        onResume={handleResumeBatchUpdate}
+        onCancel={handleCancelBatchUpdate}
       />
     )
   }
@@ -673,101 +849,126 @@ export function ProjectResults ({
       return
     }
     
-    console.log('🚀 DÉBUT MISE À JOUR - Critères sélectionnés:', selected.length)
+    console.log('🚀 DÉBUT MISE À JOUR BATCH - Critères sélectionnés:', selected.length)
     console.log('🔄 Mise à jour isUpdating à true avec flushSync...')
+    
+    // Réinitialiser les états de contrôle
+    setBatchUpdatePaused(false)
+    setBatchUpdateCancelled(false)
     
     // Utiliser flushSync pour forcer le re-render immédiat
     flushSync(() => {
       setIsUpdating(true)
       setUpdateProgress({ current: 0, total: selected.length })
-      setCurrentlyProcessing('')
+      setCurrentlyProcessing('Préparation du traitement batch...')
       setUpdateKey(prevKey => prevKey + 1)
     })
     
-    console.log('✅ États mis à jour avec flushSync, début du traitement...')
+    console.log('✅ États mis à jour avec flushSync, début du traitement batch...')
+    
+    // Créer un contrôleur pour l'annulation
+    const controller = {
+      cancel: () => {
+        setBatchUpdateCancelled(true)
+      }
+    }
+    setBatchUpdateController(controller)
     
     try {
-      // Traiter les critères un par un pour un suivi précis du progrès
-      for (let i = 0; i < selected.length; i++) {
-        const id = selected[i]
-        
-        // Trouver le critère correspondant pour récupérer ses données
+      // Vérifier si l'opération a été annulée avant de commencer
+      if (batchUpdateCancelled) {
+        console.log('❌ MISE À JOUR ANNULÉE avant le démarrage')
+        return
+      }
+      
+      // Préparer les données pour l'API batch
+      const batchRequests = selected.map(id => {
         const critere = criteriaData.find(c => c.id === id)
         if (!critere) {
           console.error(`Critère non trouvé pour l'ID: ${id}`)
-          continue
+          return null
         }
-        
-        console.log(`📊 PROGRÈS: ${i + 1}/${selected.length} - Traitement: ${critere.label}`)
-        
-        // Mettre à jour le progrès AVANT de commencer le traitement avec flushSync
-        console.log(`🔄 Mise à jour progrès avec flushSync: current=${i}, total=${selected.length}`)
-        flushSync(() => {
-          setUpdateProgress({ current: i, total: selected.length })
-          setCurrentlyProcessing(critere.label)
-          setUpdateKey(prevKey => prevKey + 1)
+        return {
+          critereId: id,
+          searchTerm: critere.label,
+          country: critere.country
+        }
+      }).filter(Boolean) // Filtrer les null/undefined
+      
+      console.log(`📊 TRAITEMENT BATCH: ${batchRequests.length} critères à traiter`)
+      
+      // Mettre à jour le progrès pour indiquer le début du traitement
+      flushSync(() => {
+        setCurrentlyProcessing(`Traitement batch de ${batchRequests.length} critères...`)
+        setUpdateKey(prevKey => prevKey + 1)
+      })
+      
+      // Appeler l'API batch avec concurrence contrôlée
+      const response = await fetch('/api/facebook/suggestions/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          requests: batchRequests,
+          maxConcurrency: 8 // Augmenté pour plus de performances
         })
-        
-        try {
-          console.log(`🔄 Traitement ${i + 1}/${selected.length}: ${critere.label}`)
-          
-          const response = await fetch('/api/facebook/suggestions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              critereId: id,
-              query: critere.label,
-              country: critere.country
-            })
-          })
-          
-          if (response.ok) {
-            console.log(`✅ Succès ${i + 1}/${selected.length}: ${critere.label}`)
-          } else {
-            console.log(`❌ Erreur ${i + 1}/${selected.length}: ${critere.label}`)
-          }
-          
-        } catch (error) {
-          console.error(`❌ Exception pour le critère ${critere.label}:`, error)
-        }
-        
-        // Mettre à jour le progrès APRÈS le traitement avec flushSync
-        console.log(`📊 MISE À JOUR PROGRÈS avec flushSync: ${i + 1}/${selected.length}`)
-        flushSync(() => {
-          setUpdateProgress({ current: i + 1, total: selected.length })
-          setUpdateKey(prevKey => prevKey + 1)
-        })
-        
-        // Petite pause entre les requêtes pour éviter de surcharger l'API et permettre le re-render
-        if (i < selected.length - 1) {
-          console.log('⏳ Pause 300ms entre les requêtes...')
-          await new Promise(resolve => setTimeout(resolve, 300))
-        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Erreur lors du traitement batch')
       }
       
-      console.log('🎉 MISE À JOUR TERMINÉE')
-      success(`${selected.length} critère(s) mis à jour`)
+      const data = await response.json()
+      
+      if (batchUpdateCancelled) {
+        console.log('❌ MISE À JOUR ANNULÉE pendant le traitement')
+        return
+      }
+      
+      console.log('🎉 TRAITEMENT BATCH TERMINÉ')
+      console.log(`📊 Statistiques: ${data.stats.successful}/${data.stats.total} succès`)
+      console.log(`📊 Suggestions trouvées: ${data.stats.totalSuggestions}`)
+      console.log(`📊 Cache hits: ${data.stats.fromCache}/${data.stats.total}`)
+      console.log(`⏱️ Temps total: ${data.stats.totalTime}ms`)
+      
+      // Mettre à jour le progrès final
+      flushSync(() => {
+        setUpdateProgress({ current: selected.length, total: selected.length })
+        setCurrentlyProcessing('Traitement terminé !')
+        setUpdateKey(prevKey => prevKey + 1)
+      })
+      
+      // Afficher un message de succès détaillé
+      if (data.stats.successful === data.stats.total) {
+        success(`✅ Traitement batch terminé: ${data.stats.successful} critères mis à jour avec ${data.stats.totalSuggestions} suggestions trouvées`)
+      } else {
+        const failedCount = data.stats.failed
+        info(`⚠️ Traitement batch terminé: ${data.stats.successful}/${data.stats.total} critères mis à jour (${failedCount} échecs)`)
+      }
       
       // Remettre à zéro la sélection après mise à jour
       setSelected([])
       
       // Attendre un peu avant de recharger pour que l'utilisateur voie la completion
-      console.log('⏳ Attente 1000ms avant reload...')
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      console.log('⏳ Attente 1500ms avant reload...')
+      await new Promise(resolve => setTimeout(resolve, 1500))
       
       // Rafraîchir les données via SWR
       console.log('🔄 Rafraîchissement des données...')
       onDataChange()
       
-    } catch (e) {
-      console.error('❌ ERREUR GLOBALE:', e)
-      error('Erreur lors de la mise à jour')
+    } catch (err) {
+      console.error('❌ ERREUR GLOBALE:', err)
+      error('Erreur lors de la mise à jour batch: ' + (err instanceof Error ? err.message : 'Erreur inconnue'))
     } finally {
       console.log('🏁 NETTOYAGE FINAL - Remise à zéro des états avec flushSync...')
       flushSync(() => {
         setIsUpdating(false)
         setUpdateProgress({ current: 0, total: 0 })
         setCurrentlyProcessing('')
+        setBatchUpdatePaused(false)
+        setBatchUpdateCancelled(false)
+        setBatchUpdateController(null)
       })
     }
   }
@@ -849,17 +1050,60 @@ export function ProjectResults ({
   if (onlyProgress) {
     return (
       <div className="w-full flex flex-col gap-8 mt-8">
-        {/* Barre de progression - uniquement si le projet n'est pas terminé */}
+        {/* Barre de progression avec contrôles - uniquement si le projet n'est pas terminé */}
         {!isComplete && (
-          <div className="w-full flex flex-col gap-2">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm font-medium text-muted-foreground">Progression</span>
-              <span className="text-xs text-muted-foreground">{progress.current}/{progress.total} criteria</span>
-            </div>
-            <Progress value={progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0} />
-            <div className="flex items-center justify-between mt-1 text-xs text-muted-foreground">
-              <span>Step: {progress.step}</span>
-              <span>Errors: {progress.errors} | ETA: {progress.eta}</span>
+          <div className="w-full flex flex-col gap-4">
+            {/* Contrôles d'enrichissement */}
+            {onControlProject && enrichmentStatus && ['processing', 'paused'].includes(enrichmentStatus) && (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  {enrichmentStatus === 'processing' && (
+                    <>
+                      <Button onClick={() => onControlProject('pause')} variant="outline" size="sm">
+                        <Pause className="h-4 w-4 mr-2" />
+                        Pause
+                      </Button>
+                      <Button onClick={() => onControlProject('cancel')} variant="destructive" size="sm">
+                        <XCircle className="h-4 w-4 mr-2" />
+                        Annuler
+                      </Button>
+                    </>
+                  )}
+                  
+                  {enrichmentStatus === 'paused' && (
+                    <>
+                      <Button onClick={() => onControlProject('resume')} className="bg-green-600 hover:bg-green-700" size="sm">
+                        <Play className="h-4 w-4 mr-2" />
+                        Reprendre
+                      </Button>
+                      <Button onClick={() => onControlProject('cancel')} variant="destructive" size="sm">
+                        <XCircle className="h-4 w-4 mr-2" />
+                        Annuler
+                      </Button>
+                    </>
+                  )}
+
+                  <div className="px-2 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">
+                    {enrichmentStatus === 'processing' ? 'En cours' : 'En pause'}
+                  </div>
+                </div>
+
+                <div className="text-right text-sm text-muted-foreground">
+                  {progress.current}/{progress.total} critères traités
+                </div>
+              </div>
+            )}
+
+            <div className="w-full flex flex-col gap-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-medium text-muted-foreground">Progression</span>
+                <span className="text-xs text-muted-foreground">{progress.current}/{progress.total} criteria</span>
+              </div>
+              <Progress value={progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0} />
+              <div className="flex items-center justify-between mt-1 text-xs text-muted-foreground">
+                <span>Step: {progress.step}</span>
+                <span>Errors: {progress.errors} | ETA: {progress.eta}</span>
+              </div>
             </div>
           </div>
         )}
@@ -912,6 +1156,12 @@ export function ProjectResults ({
                       ) : (
                         <span className="flex items-center"><RefreshCw size={16} className="mr-2" />Recalculer le score</span>
                       )}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleHideSelected}>
+                      <EyeOff size={16} className="mr-2" /> Masquer ({selected.length})
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleShowSelected}>
+                      <Eye size={16} className="mr-2" /> Afficher ({selected.length})
                     </Button>
                     <BulkActionModal
                       action="delete"
@@ -990,6 +1240,24 @@ export function ProjectResults ({
                       </Button>
                       <div className="text-xs text-gray-500">
                         ({scoreRange.min}% - {scoreRange.max}%)
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filtre pour afficher/masquer les critères cachés */}
+                  <div className="flex items-center gap-4">
+                    <label className="text-sm text-gray-600 min-w-[80px]">Affichage :</label>
+                    <div className="flex items-center gap-2">
+                      <Switch 
+                        checked={showHidden} 
+                        onCheckedChange={setShowHidden}
+                        className="h-6"
+                      />
+                      <span className="text-sm text-gray-700">
+                        {showHidden ? 'Afficher les critères masqués' : 'Masquer les critères cachés'}
+                      </span>
+                      <div className="text-xs text-gray-500">
+                        ({criteriaData.filter(c => c.isHidden).length} masqué(s))
                       </div>
                     </div>
                   </div>
@@ -1233,11 +1501,32 @@ export function ProjectResults ({
                           >
                             <RefreshCw className={loadingIndividualUpdate.has(critere.id) ? 'animate-spin' : ''} size={18} />
                           </Button>
-                          <Button size="icon" variant="outline" title="Éditer"><Edit size={18} /></Button>
+                          <Button 
+                            size="icon" 
+                            variant="outline"
+                            title={critere.isHidden ? "Afficher le critère" : "Masquer le critère"}
+                            onClick={() => handleToggleCritereVisibility(critere.id, !critere.isHidden)}
+                          >
+                            {critere.isHidden ? <Eye size={18} /> : <EyeOff size={18} />}
+                          </Button>
+                          <EditCriteriaModal
+                            critere={critere}
+                            categoriesData={categoriesData}
+                            onCriteriaUpdated={onDataChange}
+                          >
+                            <Button 
+                              size="icon" 
+                              variant="outline" 
+                              title="Éditer"
+                              onClick={() => console.log('Edit button clicked in ProjectResults for:', critere)}
+                            >
+                              <Edit size={18} />
+                            </Button>
+                          </EditCriteriaModal>
                           <Button 
                             size="icon" 
                             variant="destructive" 
-                            title="Supprimer" 
+                            title="Supprimer"
                             onClick={() => handleDeleteCritere(critere.id)}
                           >
                             <Trash2 size={18} />
@@ -1263,6 +1552,7 @@ export function ProjectResults ({
               onPageSizeChange={setResultsPerPage}
               canPreviousPage={currentPage > 1}
               canNextPage={currentPage < totalPages}
+              pageSizeOptions={resultsPerPageOptions}
             />
           </div>
         )}
@@ -1330,6 +1620,20 @@ export function ProjectResults ({
         </div>
       )}
 
+      {/* Barre de progression pour les mises à jour batch */}
+      {isUpdating && (
+        <UpdateProgressBar
+          updateProgress={updateProgress}
+          currentlyProcessing={currentlyProcessing}
+          selected={selected}
+          criteriaData={criteriaData}
+          isPaused={batchUpdatePaused}
+          onPause={handlePauseBatchUpdate}
+          onResume={handleResumeBatchUpdate}
+          onCancel={handleCancelBatchUpdate}
+        />
+      )}
+
       {/* Message d'attente si pas de critères */}
       {criteriaData.length === 0 && (
         <div className="w-full text-center text-muted-foreground py-12">
@@ -1387,6 +1691,12 @@ export function ProjectResults ({
                     ) : (
                       <span className="flex items-center"><RefreshCw size={16} className="mr-2" />Recalculer le score</span>
                     )}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleHideSelected}>
+                    <EyeOff size={16} className="mr-2" /> Masquer ({selected.length})
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleShowSelected}>
+                    <Eye size={16} className="mr-2" /> Afficher ({selected.length})
                   </Button>
                   <BulkActionModal
                     action="delete"
@@ -1643,6 +1953,14 @@ export function ProjectResults ({
                         >
                           <RefreshCw className={loadingIndividualUpdate.has(critere.id) ? 'animate-spin' : ''} size={18} />
                         </Button>
+                        <Button 
+                          size="icon" 
+                          variant="outline"
+                          title={critere.isHidden ? "Afficher le critère" : "Masquer le critère"}
+                          onClick={() => handleToggleCritereVisibility(critere.id, !critere.isHidden)}
+                        >
+                          {critere.isHidden ? <Eye size={18} /> : <EyeOff size={18} />}
+                        </Button>
                         <EditCriteriaModal
                           critere={critere}
                           categoriesData={categoriesData}
@@ -1686,6 +2004,7 @@ export function ProjectResults ({
             onPageSizeChange={setResultsPerPage}
             canPreviousPage={currentPage > 1}
             canNextPage={currentPage < totalPages}
+            pageSizeOptions={resultsPerPageOptions}
           />
         </div>
       )}

@@ -174,6 +174,19 @@ export function InterestCheckResultsClient({
 
   const fetcher = (url: string) => fetch(url).then(res => res.json())
 
+  // Charger le score minimal de pertinence depuis les settings
+  useEffect(() => {
+    fetch('/api/admin/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data.minRelevanceScorePercent) {
+          const minScore = Number(data.minRelevanceScorePercent)
+          setRelevanceThreshold(minScore)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   // Fetch progress data
   const { data: progressData, error: progressError } = useSWR<ProgressData>(
     ['in_progress', 'pending', 'paused'].includes(currentStatus) ? `/api/interests-check/${slug}/progress` : null,
@@ -207,34 +220,53 @@ export function InterestCheckResultsClient({
 
   // Control enrichment (start/pause/resume)
   const controlEnrichment = async (action: 'start' | 'pause' | 'resume') => {
-    try {
-      let response
+    const response = await fetch(`/api/interests-check/${slug}/control`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action })
+    })
+    if (response.ok) {
       if (action === 'start') {
-        response = await fetch('/api/interests-check/enrichment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ slug })
-        })
-      } else {
-        response = await fetch(`/api/interests-check/${slug}/control`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action })
-        })
+        setCurrentStatus('in_progress')
+      } else if (action === 'pause') {
+        setCurrentStatus('paused')
+      } else if (action === 'resume') {
+        setCurrentStatus('in_progress')
       }
-      
+      globalMutate(`/api/interests-check/${slug}/progress`)
+    }
+  }
+
+  // Nouveau: Contrôle pour l'enrichissement en batch
+  const controlBatchEnrichment = async (action: 'pause' | 'resume' | 'cancel') => {
+    try {
+      const response = await fetch(`/api/interests-check/${slug}/batch-control`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      })
+
       if (response.ok) {
-        globalMutate(`/api/interests-check/${slug}/progress`)
-        if (action === 'start') {
+        const data = await response.json()
+        toast(data.message, 'success')
+        
+        if (action === 'pause') {
+          setCurrentStatus('paused')
+        } else if (action === 'resume') {
           setCurrentStatus('in_progress')
+        } else if (action === 'cancel') {
+          setCurrentStatus('cancelled')
         }
+        
+        globalMutate(`/api/interests-check/${slug}/progress`)
+        mutateInterests()
       } else {
         const errorData = await response.json()
-        alert(`Erreur: ${errorData.error}`)
+        toast(`Erreur: ${errorData.error}`, 'error')
       }
     } catch (error) {
-      console.error('Erreur contrôle enrichissement:', error)
-      alert('Erreur lors du contrôle de l\'enrichissement')
+      console.error('Erreur lors du contrôle de l\'enrichissement en batch:', error)
+      toast('Erreur lors du contrôle de l\'enrichissement en batch', 'error')
     }
   }
 
@@ -293,6 +325,82 @@ export function InterestCheckResultsClient({
     await fetch(`/api/interests-check/${slug}/interests/${id}`, { method: 'DELETE' })
     setSelectedIds((prev) => prev.filter((sid) => sid !== id))
     mutateInterests()
+  }
+
+  // Nouveau: Enrichissement en batch des intérêts sélectionnés
+  const enrichSelectedInterests = async () => {
+    if (selectedIds.length === 0) return
+    if (!window.confirm(`Lancer l'enrichissement pour ${selectedIds.length} intérêts sélectionnés ?`)) return
+
+    try {
+      console.log('🚀 DÉMARRAGE BATCH ENRICHMENT:', selectedIds.length, 'intérêts sélectionnés')
+      
+      const response = await fetch(`/api/interests-check/${slug}/batch-enrichment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interestIds: selectedIds })
+      })
+
+      if (response.ok) {
+        const responseData = await response.json()
+        console.log('✅ BATCH ENRICHMENT RESPONSE:', responseData)
+        
+        // Changer immédiatement le statut à 'in_progress' pour afficher la barre de progression
+        setCurrentStatus('in_progress')
+        
+        // Rafraîchir immédiatement les données pour afficher la barre de progression
+        globalMutate(`/api/interests-check/${slug}/progress`)
+        mutateInterests()
+        
+        // Démarrer la surveillance de la progression
+        const progressInterval = setInterval(async () => {
+          try {
+            const progressResponse = await fetch(`/api/interests-check/${slug}/progress`)
+            if (progressResponse.ok) {
+              const progressData = await progressResponse.json()
+              
+              console.log('📊 PROGRESSION BATCH:', progressData)
+              
+              // Mettre à jour le statut local
+              if (progressData.enrichmentStatus && progressData.enrichmentStatus !== currentStatus) {
+                setCurrentStatus(progressData.enrichmentStatus as EnrichmentStatus)
+              }
+              
+              // Si l'enrichissement est terminé, arrêter la surveillance
+              if (progressData.enrichmentStatus === 'done' || progressData.enrichmentStatus === 'error' || progressData.enrichmentStatus === 'cancelled') {
+                clearInterval(progressInterval)
+                console.log('🎉 BATCH ENRICHMENT TERMINÉ:', progressData.enrichmentStatus)
+                globalMutate(`/api/interests-check/${slug}/progress`)
+                mutateInterests()
+                return
+              }
+              
+              // Rafraîchir les données périodiquement pendant l'enrichissement
+              if (progressData.enrichmentStatus === 'in_progress') {
+                globalMutate(`/api/interests-check/${slug}/progress`)
+              }
+            }
+          } catch (error) {
+            console.error('Erreur lors de la surveillance de progression:', error)
+          }
+        }, 2000) // Vérifier toutes les 2 secondes
+        
+        // Arrêter la surveillance après 30 minutes maximum
+        setTimeout(() => {
+          clearInterval(progressInterval)
+          console.log('⏰ TIMEOUT: Arrêt de la surveillance de progression')
+        }, 30 * 60 * 1000)
+        
+        success(`Enrichissement batch démarré pour ${selectedIds.length} intérêts`)
+        setSelectedIds([]) // Vider la sélection
+      } else {
+        const errorData = await response.json()
+        showError(`Erreur: ${errorData.error}`)
+      }
+    } catch (err) {
+      console.error('Erreur enrichissement batch:', err)
+      showError('Erreur lors du lancement de l\'enrichissement')
+    }
   }
 
   // Relancer la recherche de suggestions pour un intérêt spécifique
@@ -562,17 +670,29 @@ export function InterestCheckResultsClient({
             )}
             
             {currentStatus === 'in_progress' && (
-              <Button onClick={() => controlEnrichment('pause')} variant="outline">
-                <Pause className="h-4 w-4 mr-2" />
-                Pause
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button onClick={() => controlEnrichment('pause')} variant="outline">
+                  <Pause className="h-4 w-4 mr-2" />
+                  Pause
+                </Button>
+                <Button onClick={() => controlBatchEnrichment('cancel')} variant="destructive" size="sm">
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Annuler
+                </Button>
+              </div>
             )}
             
             {currentStatus === 'paused' && (
-              <Button onClick={() => controlEnrichment('resume')} className="bg-green-600 hover:bg-green-700">
-                <Play className="h-4 w-4 mr-2" />
-                Reprendre
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button onClick={() => controlEnrichment('resume')} className="bg-green-600 hover:bg-green-700">
+                  <Play className="h-4 w-4 mr-2" />
+                  Reprendre
+                </Button>
+                <Button onClick={() => controlBatchEnrichment('cancel')} variant="destructive" size="sm">
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Annuler
+                </Button>
+              </div>
             )}
 
             {getStatusBadge(currentStatus)}
@@ -694,6 +814,9 @@ export function InterestCheckResultsClient({
                 <span>{selectedIds.length} sélectionné{selectedIds.length > 1 ? 's' : ''}</span>
                 <Button variant="default" size="sm" onClick={recalculateSelectedScores} disabled={selectedIds.length === 0 || isRecalculating}>
                   {isRecalculating ? <RotateCcw className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />} Recalculer le score
+                </Button>
+                <Button variant="default" size="sm" onClick={enrichSelectedInterests} disabled={selectedIds.length === 0 || ['in_progress', 'paused'].includes(currentStatus)}>
+                  <Play className="h-4 w-4 mr-2" /> Lancer l'enrichissement en batch
                 </Button>
                 <Button variant="destructive" size="sm" onClick={deleteSelected} disabled={selectedIds.length === 0}>
                   <Trash2 className="h-4 w-4 mr-2" /> Supprimer la sélection

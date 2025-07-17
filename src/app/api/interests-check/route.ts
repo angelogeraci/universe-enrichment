@@ -8,20 +8,45 @@ import * as XLSX from 'xlsx'
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
+    console.log('SESSION DEBUG:', session)
+    
     if (!session?.user?.email) {
+      console.log('❌ AUTHENTIFICATION ÉCHOUÉE: Pas de session ou email')
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email }
+    // Utiliser session.user.id directement s'il est disponible
+    let userId = session.user.id
+    
+    if (!userId) {
+      console.log('🔍 Recherche utilisateur par email:', session.user.email)
+      const user = await prisma.user.findUnique({
+        where: { email: session.user.email }
+      })
+
+      if (!user) {
+        console.log('❌ UTILISATEUR NON TROUVÉ:', session.user.email)
+        return NextResponse.json({ error: 'Utilisateur non trouvé' }, { status: 401 })
+      }
+      
+      userId = user.id
+    }
+
+    console.log('✅ UTILISATEUR AUTHENTIFIÉ:', { userId, email: session.user.email })
+
+    // Vérifier que l'utilisateur existe vraiment
+    const userExists = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true }
     })
 
-    if (!user) {
-      return NextResponse.json({ error: 'Utilisateur non trouvé' }, { status: 404 })
+    if (!userExists) {
+      console.log('❌ UTILISATEUR ID INVALIDE:', userId)
+      return NextResponse.json({ error: 'Utilisateur invalide' }, { status: 401 })
     }
 
     const interestChecks = await prisma.interestCheck.findMany({
-      where: { ownerId: user.id },
+      where: { ownerId: userId },
       include: {
         _count: {
           select: { interests: true }
@@ -30,9 +55,11 @@ export async function GET() {
       orderBy: { createdAt: 'desc' }
     })
 
+    console.log('📊 INTEREST CHECKS TROUVÉS:', interestChecks.length)
+
     return NextResponse.json({ interestChecks })
   } catch (error) {
-    console.error('Erreur lors de la récupération des Interest Checks:', error)
+    console.error('❌ ERREUR API INTERESTS-CHECK:', error)
     return NextResponse.json({ error: 'Erreur interne du serveur' }, { status: 500 })
   }
 }
@@ -45,12 +72,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email }
+    // Utiliser session.user.id directement s'il est disponible
+    let userId = session.user.id
+    
+    if (!userId) {
+      const user = await prisma.user.findUnique({
+        where: { email: session.user.email }
+      })
+
+      if (!user) {
+        return NextResponse.json({ error: 'Utilisateur non trouvé' }, { status: 401 })
+      }
+      
+      userId = user.id
+    }
+
+    // Vérifier que l'utilisateur existe vraiment
+    const userExists = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true }
     })
 
-    if (!user) {
-      return NextResponse.json({ error: 'Utilisateur non trouvé' }, { status: 404 })
+    if (!userExists) {
+      return NextResponse.json({ error: 'Utilisateur invalide' }, { status: 401 })
     }
 
     // Parser le FormData
@@ -108,7 +152,7 @@ export async function POST(request: NextRequest) {
           description: description || null,
           country,
           fileName: file.name,
-          ownerId: user.id
+          ownerId: userId
         }
       })
 

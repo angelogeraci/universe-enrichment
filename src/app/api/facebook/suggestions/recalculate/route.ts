@@ -31,40 +31,58 @@ export async function POST(request: NextRequest) {
     let errors: string[] = []
 
     for (const critereId of critereIds) {
-      const suggestions = await prisma.suggestionFacebook.findMany({
-        where: { critereId },
-      })
-      
-      if (!suggestions.length) {
-        errors.push(`Aucune suggestion pour critereId ${critereId}`)
-        continue
-      }
-      
       const critere = await prisma.critere.findUnique({ where: { id: critereId } })
       if (!critere) {
         errors.push(`Critère introuvable: ${critereId}`)
         continue
       }
       
-      for (const suggestion of suggestions) {
-        const newScore = calculateSimilarityScore({
+      // Calculer les nouveaux scores pour toutes les suggestions
+      for (const suggestion of critere.suggestions) {
+        const score = calculateSimilarityScore({
           input: critere.label,
           suggestion: {
             label: suggestion.label,
             audience: suggestion.audience,
-            path: undefined,
+            path: [],
             brand: undefined,
             type: undefined
           },
           context: undefined,
           weights: scoreWeights
         })
-        
+
+        // Mise à jour avec nouveau score
         await prisma.suggestionFacebook.update({
           where: { id: suggestion.id },
-          data: { similarityScore: newScore / 100 },
+          data: { 
+            similarityScore: score / 100, // Diviser par 100 pour normaliser en 0-1
+            isBestMatch: false // Sera mis à jour après tri
+          }
         })
+
         updatedCount++
+      }
+
+      // Après mise à jour de toutes les suggestions, déterminer le best match
+      const updatedSuggestions = await prisma.suggestionFacebook.findMany({
+        where: { critereId: critere.id },
+        orderBy: { similarityScore: 'desc' }
+      })
+
+      // Mettre à jour le best match
+      if (updatedSuggestions.length > 0) {
+        // Retirer le best match de toutes les suggestions
+        await prisma.suggestionFacebook.updateMany({
+          where: { critereId: critere.id },
+          data: { isBestMatch: false }
+        })
+
+        // Marquer la suggestion avec le meilleur score comme best match
+        await prisma.suggestionFacebook.update({
+          where: { id: updatedSuggestions[0].id },
+          data: { isBestMatch: true }
+        })
       }
     }
     

@@ -25,6 +25,7 @@ interface AppSettings {
   facebookBatchSize: string
   facebookPauseMs: string
   facebookRelevanceScoreThreshold: string
+  minRelevanceScorePercent: string
   scoreWeights?: ScoreWeights
 }
 
@@ -41,6 +42,7 @@ const AdminSettingsPage = () => {
     facebookBatchSize: '',
     facebookPauseMs: '',
     facebookRelevanceScoreThreshold: '',
+    minRelevanceScorePercent: '',
   })
   const [loading, setLoading] = useState<boolean>(true)
   const [saving, setSaving] = useState<boolean>(false)
@@ -198,6 +200,24 @@ const AdminSettingsPage = () => {
             />
             <p className="text-sm text-gray-600">
               📊 Plus bas = plus de suggestions (mais moins pertinentes)
+            </p>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="minRelevanceScorePercent">
+              Score minimal considéré comme pertinent (%)
+            </Label>
+            <Input
+              id="minRelevanceScorePercent"
+              type="number"
+              min="0"
+              max="100"
+              value={settings.minRelevanceScorePercent}
+              onChange={handleChange}
+              placeholder="Ex: 60"
+            />
+            <p className="text-sm text-gray-600">
+              🎯 Définit la frontière entre "pertinent" et "non pertinent" dans les filtres (ex: 60 = 60% et plus)
             </p>
           </div>
           

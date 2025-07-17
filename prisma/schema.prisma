@@ -129,6 +129,7 @@ model Critere {
   status               String
   note                 String?
   selectedSuggestionId String?
+  isHidden             Boolean              @default(false)
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   project              Project              @relation(fields: [projectId], references: [id])
@@ -173,7 +174,7 @@ model AppSetting {
 model FacebookSuggestionCache {
   id          String   @id @default(cuid())
   cacheKey    String   @unique
-  suggestions String   // JSON des suggestions
+  suggestions String
   country     String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

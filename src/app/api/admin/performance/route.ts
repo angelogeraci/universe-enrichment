@@ -382,7 +382,18 @@ async function getProjectsPerformance() {
 
     const totalCriteres = await prisma.critere.count()
 
-    // Quality score moyen pour les projets (corrigé)
+    // Récupérer le score minimal configuré
+    let minRelevanceScore = 60 // Valeur par défaut
+    try {
+      const setting = await prisma.appSetting.findUnique({ where: { key: 'minRelevanceScorePercent' } })
+      if (setting && setting.value) {
+        minRelevanceScore = Number(setting.value)
+      }
+    } catch (error) {
+      console.log('⚠️ Impossible de récupérer minRelevanceScorePercent, utilisation de la valeur par défaut 60')
+    }
+
+    // Quality score moyen pour les projets (avec seuil dynamique)
     const avgQualityScore = await prisma.$queryRaw`
       SELECT AVG(
         CASE 
@@ -394,7 +405,7 @@ async function getProjectsPerformance() {
         SELECT 
           c.id,
           COUNT(sf.id) as suggestion_count,
-          COUNT(CASE WHEN sf."similarityScore" >= 60 THEN 1 END) as high_quality_count
+          COUNT(CASE WHEN sf."similarityScore" >= ${minRelevanceScore} THEN 1 END) as high_quality_count
         FROM "Critere" c
         LEFT JOIN "SuggestionFacebook" sf ON c.id = sf."critereId"
         GROUP BY c.id

@@ -184,138 +184,122 @@ async function triggerEnrichment(project: any, categories: any[], req: NextReque
   const facebookFailed: { label: string, error: string }[] = []
   const { facebookBatchSize, facebookPauseMs, facebookRelevanceScoreThreshold } = await getAppSettings();
 
-  // Boucle principale : tant qu'il reste des critères à traiter
+  // ✅ NOUVELLE APPROCHE: TRAITEMENT EN BATCH OPTIMISÉ
+  console.log('🚀 DÉBUT TRAITEMENT FACEBOOK EN BATCH OPTIMISÉ')
+  
   while (criteresToProcess.length > 0) {
-    for (let idx = 0; idx < criteresToProcess.length; idx++) {
-      const critere = criteresToProcess[idx];
-      let attempt = 0;
-      let success = false;
-      let lastError = '';
-      while (attempt < 3 && !success) {
-        attempt++;
-        console.log(`🔄 [${idx + 1}/${totalSteps}] Critère: "${critere.label}" (tentative ${attempt}/3)`);
-        try {
-          const facebookResponse = await fetch(`${baseUrl}/api/facebook/suggestions`, {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'X-Log-Type': 'AUTO_ENRICHMENT',
-              'X-Project-Slug': project.slug,
-              'X-Project-Id': project.id
-            },
-            body: JSON.stringify({
-              critereId: critere.id,
-              query: critere.label,
-              country: critere.country
+    const batchSize = Math.min(facebookBatchSize, criteresToProcess.length)
+    const batch = criteresToProcess.slice(0, batchSize)
+    
+    console.log(`📦 TRAITEMENT BATCH: ${batch.length} critères (${facebookProcessedCount}/${totalSteps} traités)`)
+    
+    // Préparer les requêtes batch
+    const batchRequests = batch.map(critere => ({
+      critereId: critere.id,
+      searchTerm: critere.label,
+      country: critere.country
+    }))
+    
+    try {
+      // Appel à la nouvelle API batch
+      const batchResponse = await fetch(`${baseUrl}/api/facebook/suggestions/batch`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Log-Type': 'AUTO_ENRICHMENT',
+          'X-Project-Slug': project.slug,
+          'X-Project-Id': project.id
+        },
+        body: JSON.stringify({
+          requests: batchRequests,
+          maxConcurrency: 5 // Traitement parallèle contrôlé
+        })
+      })
+      
+      if (batchResponse.ok) {
+        const batchData = await batchResponse.json()
+        
+        // Mettre à jour les statuts des critères
+        for (const result of batchData.results) {
+          if (result.success) {
+            await prisma.critere.update({
+              where: { id: result.critereId },
+              data: { status: "done", note: null }
             })
-          });
-          let facebookData;
-          try {
-            facebookData = await facebookResponse.json();
-          } catch (e) {
-            const raw = await facebookResponse.text();
-            lastError = `Réponse non JSON (code ${facebookResponse.status}): ${raw.substring(0, 200)}`;
-            console.error(`❌ ERREUR PARSING FACEBOOK ${critere.label}:`, lastError);
-            // Statut retry, jamais failed
-            await prisma.critere.update({ where: { id: critere.id }, data: { status: "retry", note: lastError } });
-            await new Promise(res => setTimeout(res, 1000 * attempt));
-            continue;
-          }
-          if (facebookResponse.ok) {
-            facebookProcessedCount++;
-            console.log(`✅ SUGGESTIONS FACEBOOK ${critere.label}: ${facebookData.totalFound || 0} trouvées`);
-            success = true;
-            await prisma.critere.update({ where: { id: critere.id }, data: { status: "done", note: null } });
+            facebookProcessedCount++
           } else {
-            lastError = facebookData.error || `Erreur HTTP ${facebookResponse.status}`;
-            console.log(`❌ ERREUR FACEBOOK ${critere.label}:`, lastError);
-            // Si erreur 5xx ou rate limit, retry, sinon failed
-            if (facebookResponse.status >= 500 || facebookResponse.status === 429) {
-              await prisma.critere.update({ where: { id: critere.id }, data: { status: "retry", note: lastError } });
-            } else {
-              await prisma.critere.update({ where: { id: critere.id }, data: { status: "failed", note: lastError } });
-            }
-            await new Promise(res => setTimeout(res, 1000 * attempt));
+            await prisma.critere.update({
+              where: { id: result.critereId },
+              data: { status: "retry", note: result.error }
+            })
+            facebookFailed.push({ label: result.searchTerm, error: result.error })
           }
-        } catch (error) {
-          lastError = typeof error === 'object' && error !== null && 'message' in error ? (error as any).message : String(error);
-          console.error(`❌ EXCEPTION FACEBOOK ${critere.label}:`, lastError);
-          
-          // Analyser le type d'erreur pour déterminer la stratégie
-          let shouldRetry = true;
-          let delayMultiplier = 1;
-          
-          if (lastError.includes('Token Facebook invalide') || lastError.includes('Non autorisé (401)')) {
-            // Erreur de token : ne pas retenter, c'est définitif
-            shouldRetry = false;
-            await prisma.critere.update({ where: { id: critere.id }, data: { status: "failed", note: lastError } });
-            console.error(`🚫 ERREUR CRITIQUE TOKEN: ${critere.label} - Arrêt des tentatives`);
-          } else if (lastError.includes('Rate limit') || lastError.includes('429')) {
-            // Rate limit : retry avec délai plus long
-            delayMultiplier = 5;
-            await prisma.critere.update({ where: { id: critere.id }, data: { status: "retry", note: lastError } });
-            console.warn(`⏸️ RATE LIMIT: ${critere.label} - Retry avec délai prolongé`);
-          } else if (lastError.includes('Erreur serveur') || lastError.includes('500')) {
-            // Erreur serveur : retry avec délai moyen
-            delayMultiplier = 3;
-            await prisma.critere.update({ where: { id: critere.id }, data: { status: "retry", note: lastError } });
-            console.warn(`🔧 ERREUR SERVEUR: ${critere.label} - Retry avec délai moyen`);
-          } else if (lastError.includes('network') || lastError.includes('timeout') || lastError.includes('AbortError')) {
-            // Erreur réseau : retry avec délai court
-            delayMultiplier = 2;
-            await prisma.critere.update({ where: { id: critere.id }, data: { status: "retry", note: lastError } });
-            console.warn(`🌐 ERREUR RÉSEAU: ${critere.label} - Retry avec délai court`);
-          } else {
-            // Erreur inconnue : retry avec délai standard
-            await prisma.critere.update({ where: { id: critere.id }, data: { status: "retry", note: lastError } });
-            console.warn(`❓ ERREUR INCONNUE: ${critere.label} - Retry standard`);
-          }
-          
-          if (shouldRetry) {
-            const delay = 1000 * attempt * delayMultiplier;
-            console.log(`⏳ Attente ${delay}ms avant retry (tentative ${attempt}/${3})`);
-            await new Promise(res => setTimeout(res, delay));
-          } else {
-            // Si on ne doit pas retenter, sortir de la boucle while
-            break;
-          }
+        }
+        
+        console.log(`✅ BATCH TERMINÉ: ${batchData.stats.successful}/${batchData.stats.total} succès`)
+        console.log(`📊 Cache: ${batchData.stats.fromCache}/${batchData.stats.total} hits (${Math.round(batchData.stats.fromCache/batchData.stats.total*100)}%)`)
+        
+      } else {
+        console.error('❌ Erreur batch Facebook:', await batchResponse.text())
+        // Fallback sur traitement individuel
+        for (const critere of batch) {
+          await prisma.critere.update({
+            where: { id: critere.id },
+            data: { status: "retry", note: "Erreur batch, à retenter" }
+          })
         }
       }
-      if (!success) {
-        facebookFailed.push({ label: critere.label, error: lastError });
-        console.warn(`❌ [${idx + 1}/${totalSteps}] ÉCHEC Critère: "${critere.label}" après 3 tentatives : ${lastError}`);
-      }
-      await new Promise(resolve => setTimeout(resolve, 100));
-      if (facebookProcessedCount > 0 && facebookProcessedCount % facebookBatchSize === 0) {
-        console.log(`⏸️ Pause Facebook de ${facebookPauseMs / 1000}s après ${facebookBatchSize} requêtes réussies...`);
-        const statusBeforePause = await prisma.project.findUnique({ where: { id: project.id } });
-        if (!statusBeforePause || ['cancelled', 'paused'].includes(statusBeforePause.enrichmentStatus)) {
-          console.log('🛑 Enrichissement arrêté pendant la pause Facebook');
-          return;
-        }
-        await prisma.project.update({
-          where: { id: project.id },
-          data: { 
-            enrichmentStatus: 'processing',
-            updatedAt: new Date()
-          }
-        });
-        await new Promise(resolve => setTimeout(resolve, facebookPauseMs));
-        const statusAfterPause = await prisma.project.findUnique({ where: { id: project.id } });
-        if (!statusAfterPause || ['cancelled', 'paused'].includes(statusAfterPause.enrichmentStatus)) {
-          console.log('🛑 Enrichissement arrêté après la pause Facebook');
-          return;
-        }
-        console.log(`▶️ Reprise après pause Facebook (${facebookProcessedCount}/${totalSteps} traités)`);
+      
+    } catch (error) {
+      console.error('❌ Exception batch Facebook:', error)
+      // Marquer comme retry pour traitement ultérieur
+      for (const critere of batch) {
+        await prisma.critere.update({
+          where: { id: critere.id },
+          data: { status: "retry", note: "Exception batch" }
+        })
       }
     }
-    // Après un passage, recharger les critères "retry" (toujours pour ce projet)
+    
+    // Pause optimisée entre les batches
+    if (facebookProcessedCount > 0 && facebookProcessedCount % facebookBatchSize === 0) {
+      console.log(`⏸️ Pause optimisée de ${facebookPauseMs / 1000}s après ${facebookBatchSize} requêtes...`)
+      
+      // Vérifier le statut AVANT la pause
+      const statusBeforePause = await prisma.project.findUnique({ where: { id: project.id } })
+      if (!statusBeforePause || ['cancelled', 'paused'].includes(statusBeforePause.enrichmentStatus)) {
+        console.log('🛑 Enrichissement arrêté pendant la pause Facebook')
+        return
+      }
+      
+      await prisma.project.update({
+        where: { id: project.id },
+        data: { 
+          enrichmentStatus: 'processing',
+          updatedAt: new Date()
+        }
+      })
+      
+      await new Promise(resolve => setTimeout(resolve, facebookPauseMs))
+      
+      // Vérifier le statut APRÈS la pause
+      const statusAfterPause = await prisma.project.findUnique({ where: { id: project.id } })
+      if (!statusAfterPause || ['cancelled', 'paused'].includes(statusAfterPause.enrichmentStatus)) {
+        console.log('🛑 Enrichissement arrêté après la pause Facebook')
+        return
+      }
+      
+      console.log(`▶️ Reprise après pause optimisée (${facebookProcessedCount}/${totalSteps} traités)`)
+    }
+    
+    // Recharger les critères "retry" pour le prochain batch
     criteresToProcess = await prisma.critere.findMany({
       where: { projectId: project.id, status: "retry" },
       orderBy: { createdAt: 'asc' }
-    });
+    })
+    
     if (criteresToProcess.length > 0) {
-      console.log(`🔁 ${criteresToProcess.length} critères à retenter (status=retry)`);
+      console.log(`🔁 ${criteresToProcess.length} critères à retenter (status=retry)`)
     }
   }
 
